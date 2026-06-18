@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/burinake}
+    username: ${SPRING_DATASOURCE_USERNAME:burinake}
+    password: ${SPRING_DATASOURCE_PASSWORD:burinake_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+
+ai:
+  yolo-base-url: ${AI_YOLO_BASE_URL:http://localhost:8001}
+  vlm-base-url: ${AI_VLM_BASE_URL:http://localhost:8002}

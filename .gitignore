@@ -1,0 +1,54 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Environment
+.env
+.env.*
+!.env.example
+!.env.dev.example
+!.env.prod.example
+
+# Logs
+logs/
+*.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+frontend/coverage/
+
+# Backend
+backend/build/
+backend/target/
+backend/.gradle/
+backend/out/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+ai/**/models/*.pt
+ai/**/models/*.onnx
+ai/**/models/*.safetensors
+
+# Database / storage
+database/data/
+*.sqlite
+*.db
+
+# Docker
+docker-compose.override.yml
+
+# Azure / IaC
+*.tfstate
+*.tfstate.*
+.terraform/

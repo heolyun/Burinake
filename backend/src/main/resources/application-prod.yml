@@ -1,0 +1,17 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+azure:
+  storage:
+    connection-string: ${AZURE_STORAGE_CONNECTION_STRING}
+    blob-container: ${AZURE_BLOB_CONTAINER:fire-events}
+
+ai:
+  yolo-base-url: ${AI_YOLO_BASE_URL}
+  vlm-base-url: ${AI_VLM_BASE_URL}
