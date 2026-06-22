@@ -44,6 +44,7 @@ services:
       MODEL_PATH: /app/models/yolo-fire.pt
     volumes:
       - ./ai/yolo-server:/app
+      - ${YOLO_MODEL_DIR:-/opt/burinake/models/yolo}:/app/models
 
   vlm-server:
     build:
@@ -56,6 +57,7 @@ services:
       MODEL_PROVIDER: local
     volumes:
       - ./ai/vlm-server:/app
+      - ${VLM_MODEL_DIR:-/opt/burinake/models/vlm}:/app/models
 
   postgres:
     image: postgres:16-alpine

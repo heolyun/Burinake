@@ -35,6 +35,8 @@ services:
     environment:
       APP_ENV: prod
       MODEL_PATH: /app/models/yolo-fire.pt
+    volumes:
+      - ${YOLO_MODEL_DIR:-/opt/burinake/models/yolo}:/app/models
 
   vlm-server:
     build:
@@ -44,6 +46,8 @@ services:
     environment:
       APP_ENV: prod
       MODEL_PROVIDER: ${MODEL_PROVIDER:-azure-openai}
+    volumes:
+      - ${VLM_MODEL_DIR:-/opt/burinake/models/vlm}:/app/models
 
   nginx:
     image: nginx:1.27-alpine

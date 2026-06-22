@@ -5,9 +5,14 @@ on:
     branches:
       - develop
 
+concurrency:
+  group: deploy-develop
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: develop
 
     steps:
       - name: Deploy via SSH
@@ -18,6 +23,5 @@ jobs:
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
             cd ~/Burinake
-            git pull origin develop
+            git pull --ff-only origin develop
             docker compose -f docker-compose.dev.yml up -d --build
-            docker ps

@@ -15,6 +15,7 @@ Thumbs.db
 # Logs
 logs/
 *.log
+**/logs/
 
 # Frontend
 frontend/node_modules/
@@ -36,9 +37,29 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
-ai/**/models/*.pt
-ai/**/models/*.onnx
-ai/**/models/*.safetensors
+*.pt
+*.pth
+*.onnx
+*.safetensors
+**/models/
+!ai/yolo-server/models/
+!ai/yolo-server/models/.gitkeep
+!ai/vlm-server/models/
+!ai/vlm-server/models/.gitkeep
+**/hf_cache/
+**/.cache/huggingface/
+**/huggingface/
+**/datasets/
+**/dataset/
+**/data/raw/
+**/data/processed/
+**/training/
+**/training-results/
+**/runs/
+**/outputs/
+**/artifacts/
+**/checkpoints/
+**/wandb/
 
 # Database / storage
 database/data/
