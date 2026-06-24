@@ -1,4 +1,4 @@
-﻿package com.burinake.service.impl;
+package com.burinake.service.impl;
 
 import com.burinake.domain.FireEventPersistCommand;
 import com.burinake.dto.FireDetectionResponse;

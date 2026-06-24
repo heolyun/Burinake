@@ -3,11 +3,10 @@ import tempfile
 from functools import lru_cache
 from pathlib import Path
 
-import cv2
 import numpy as np
 from fastapi import APIRouter, File, Form, UploadFile
+from PIL import Image
 from pydantic import BaseModel, Field
-from ultralytics import YOLO
 
 router = APIRouter()
 
@@ -34,11 +33,20 @@ class FireAnalyzeResponse(BaseModel):
 
 
 @lru_cache
-def load_model() -> YOLO | None:
+def load_model():
     model_path = os.getenv("MODEL_PATH")
-    if model_path and Path(model_path).exists():
+    if not model_path or not Path(model_path).exists():
+        return None
+
+    try:
+        from ultralytics import YOLO
+    except Exception:
+        return None
+
+    try:
         return YOLO(model_path)
-    return None
+    except Exception:
+        return None
 
 
 def infer_with_model(image_path: str) -> FireAnalyzeResponse | None:
@@ -46,7 +54,11 @@ def infer_with_model(image_path: str) -> FireAnalyzeResponse | None:
     if model is None:
         return None
 
-    results = model.predict(source=image_path, conf=0.25, verbose=False)
+    try:
+        results = model.predict(source=image_path, conf=0.25, verbose=False)
+    except Exception:
+        return None
+
     if not results:
         return FireAnalyzeResponse(detected=False, confidence=None, boxes=[])
 
@@ -84,11 +96,13 @@ def infer_with_model(image_path: str) -> FireAnalyzeResponse | None:
 
 
 def infer_with_heuristic(image_path: str) -> FireAnalyzeResponse:
-    image = cv2.imread(image_path)
-    if image is None:
+    try:
+        with Image.open(image_path) as image:
+            rgb_image = image.convert("RGB")
+            rgb = np.array(rgb_image)
+    except Exception:
         return FireAnalyzeResponse(detected=False, confidence=None, boxes=[])
 
-    rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     r = rgb[:, :, 0].astype(np.int16)
     g = rgb[:, :, 1].astype(np.int16)
     b = rgb[:, :, 2].astype(np.int16)

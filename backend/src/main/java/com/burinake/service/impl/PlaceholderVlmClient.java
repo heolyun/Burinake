@@ -1,4 +1,4 @@
-﻿package com.burinake.service.impl;
+package com.burinake.service.impl;
 
 import com.burinake.client.MultipartFormDataBuilder;
 import com.burinake.config.AiProperties;

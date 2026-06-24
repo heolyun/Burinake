@@ -9,6 +9,8 @@ import com.burinake.config.AzureStorageProperties;
 import com.burinake.service.ImageStorageService;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -17,7 +19,7 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 class AzureBlobImageStorageService implements ImageStorageService {
 
-    private final BlobContainerClient containerClient;
+    private final AzureStorageProperties azureStorageProperties;
 
     public AzureBlobImageStorageService(AzureStorageProperties azureStorageProperties) {
         if (!StringUtils.hasText(azureStorageProperties.connectionString())) {
@@ -26,12 +28,7 @@ class AzureBlobImageStorageService implements ImageStorageService {
         if (!StringUtils.hasText(azureStorageProperties.blobContainer())) {
             throw new IllegalStateException("AZURE_BLOB_CONTAINER is required");
         }
-
-        BlobServiceClient blobServiceClient = new BlobServiceClientBuilder()
-                .connectionString(azureStorageProperties.connectionString())
-                .buildClient();
-        this.containerClient = blobServiceClient.getBlobContainerClient(azureStorageProperties.blobContainer());
-        this.containerClient.createIfNotExists();
+        this.azureStorageProperties = azureStorageProperties;
     }
 
     @Override
@@ -42,6 +39,20 @@ class AzureBlobImageStorageService implements ImageStorageService {
                 capturedDate.getDayOfMonth(),
                 imageId
         );
+
+        try {
+            return uploadToAzure(image, blobPath);
+        } catch (Exception ex) {
+            return storeLocally(image, blobPath);
+        }
+    }
+
+    private StoredImage uploadToAzure(MultipartFile image, String blobPath) throws IOException {
+        BlobServiceClient blobServiceClient = new BlobServiceClientBuilder()
+                .connectionString(azureStorageProperties.connectionString())
+                .buildClient();
+        BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(azureStorageProperties.blobContainer());
+        containerClient.createIfNotExists();
 
         BlobClient blobClient = containerClient.getBlobClient(blobPath);
         try (InputStream inputStream = image.getInputStream()) {
@@ -59,6 +70,25 @@ class AzureBlobImageStorageService implements ImageStorageService {
                 containerClient.getBlobContainerName(),
                 image.getContentType(),
                 image.getSize()
+        );
+    }
+
+    private StoredImage storeLocally(MultipartFile image, String blobPath) throws IOException {
+        Path rootPath = Path.of(System.getProperty("java.io.tmpdir"), "burinake-fire-events");
+        Path localPath = rootPath.resolve(blobPath);
+        Files.createDirectories(localPath.getParent());
+
+        try (InputStream inputStream = image.getInputStream()) {
+            Files.copy(inputStream, localPath, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        return new StoredImage(
+                blobPath,
+                localPath.toUri().toString(),
+                "LOCAL_FS",
+                "local",
+                image.getContentType(),
+                Files.size(localPath)
         );
     }
 }
