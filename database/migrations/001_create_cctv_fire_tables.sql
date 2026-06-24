@@ -1,5 +1,6 @@
--- Initial PostgreSQL schema for the CCTV fire detection MVP.
-CREATE TABLE IF NOT EXISTS cctv (
+-- Migration: create CCTV fire detection MVP tables.
+-- Source: cctv_fire_postgresql_table_definition.xlsx, 07_DDL sheet.
+CREATE TABLE cctv (
     cctv_id BIGSERIAL PRIMARY KEY,
     cctv_name VARCHAR(100) NOT NULL,
     cctv_num VARCHAR(50) NOT NULL,
@@ -10,7 +11,7 @@ CREATE TABLE IF NOT EXISTS cctv (
     CONSTRAINT ux_cctv_name_num UNIQUE (cctv_name, cctv_num)
 );
 
-CREATE TABLE IF NOT EXISTS snapshot_image (
+CREATE TABLE snapshot_image (
     image_id BIGSERIAL PRIMARY KEY,
     cctv_id BIGINT NOT NULL REFERENCES cctv(cctv_id),
     storage_provider VARCHAR(30) NOT NULL DEFAULT 'AZURE_BLOB',
@@ -26,10 +27,10 @@ CREATE TABLE IF NOT EXISTS snapshot_image (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_snapshot_cctv_time
+CREATE INDEX idx_snapshot_cctv_time
 ON snapshot_image (cctv_id, snapshot_time);
 
-CREATE TABLE IF NOT EXISTS yolo_result (
+CREATE TABLE yolo_result (
     yolo_result_id BIGSERIAL PRIMARY KEY,
     image_id BIGINT NOT NULL REFERENCES snapshot_image(image_id),
     model_name VARCHAR(100) NOT NULL DEFAULT 'YOLO',
@@ -44,13 +45,13 @@ CREATE TABLE IF NOT EXISTS yolo_result (
     CONSTRAINT ux_yolo_image_round UNIQUE (image_id, analysis_round)
 );
 
-CREATE INDEX IF NOT EXISTS idx_yolo_image
+CREATE INDEX idx_yolo_image
 ON yolo_result (image_id);
 
-CREATE INDEX IF NOT EXISTS idx_yolo_fire_smoke
+CREATE INDEX idx_yolo_fire_smoke
 ON yolo_result (is_fire, is_smoke, analyzed_at);
 
-CREATE TABLE IF NOT EXISTS detection_box (
+CREATE TABLE detection_box (
     box_id BIGSERIAL PRIMARY KEY,
     yolo_result_id BIGINT NOT NULL REFERENCES yolo_result(yolo_result_id),
     box_order INT NOT NULL DEFAULT 1,
@@ -70,10 +71,10 @@ CREATE TABLE IF NOT EXISTS detection_box (
     CONSTRAINT chk_coordinate_type CHECK (coordinate_type IN ('PIXEL', 'NORMALIZED'))
 );
 
-CREATE INDEX IF NOT EXISTS idx_box_result_type
+CREATE INDEX idx_box_result_type
 ON detection_box (yolo_result_id, detection_type);
 
-CREATE TABLE IF NOT EXISTS issue (
+CREATE TABLE issue (
     issue_id BIGSERIAL PRIMARY KEY,
     cctv_id BIGINT NOT NULL REFERENCES cctv(cctv_id),
     trigger_image_id BIGINT NOT NULL REFERENCES snapshot_image(image_id),
@@ -101,16 +102,16 @@ CREATE TABLE IF NOT EXISTS issue (
     CONSTRAINT chk_issue_latest_level CHECK (latest_level IS NULL OR latest_level BETWEEN 1 AND 4)
 );
 
-CREATE INDEX IF NOT EXISTS idx_issue_cctv_detected
+CREATE INDEX idx_issue_cctv_detected
 ON issue (cctv_id, detected_at);
 
-CREATE INDEX IF NOT EXISTS idx_issue_type_status
+CREATE INDEX idx_issue_type_status
 ON issue (issue_type, issue_status, detected_at);
 
-CREATE INDEX IF NOT EXISTS idx_issue_latest_level
+CREATE INDEX idx_issue_latest_level
 ON issue (latest_level, detected_at);
 
-CREATE TABLE IF NOT EXISTS issue_snapshot (
+CREATE TABLE issue_snapshot (
     issue_snapshot_id BIGSERIAL PRIMARY KEY,
     issue_id BIGINT NOT NULL REFERENCES issue(issue_id),
     image_id BIGINT NOT NULL REFERENCES snapshot_image(image_id),
@@ -122,10 +123,10 @@ CREATE TABLE IF NOT EXISTS issue_snapshot (
     CONSTRAINT ux_issue_sequence UNIQUE (issue_id, sequence_no)
 );
 
-CREATE INDEX IF NOT EXISTS idx_issue_snapshot_issue_seq
+CREATE INDEX idx_issue_snapshot_issue_seq
 ON issue_snapshot (issue_id, sequence_no);
 
-CREATE TABLE IF NOT EXISTS vlm_result (
+CREATE TABLE vlm_result (
     vlm_result_id BIGSERIAL PRIMARY KEY,
     issue_id BIGINT NOT NULL REFERENCES issue(issue_id),
     analysis_round INT NOT NULL DEFAULT 1,
@@ -144,13 +145,13 @@ CREATE TABLE IF NOT EXISTS vlm_result (
     CONSTRAINT chk_vlm_level CHECK (level BETWEEN 1 AND 4)
 );
 
-CREATE INDEX IF NOT EXISTS idx_vlm_issue_round
+CREATE INDEX idx_vlm_issue_round
 ON vlm_result (issue_id, analysis_round);
 
-CREATE INDEX IF NOT EXISTS idx_vlm_real_fire_level
+CREATE INDEX idx_vlm_real_fire_level
 ON vlm_result (is_real_fire, level, analyzed_at);
 
-CREATE TABLE IF NOT EXISTS emergency_report (
+CREATE TABLE emergency_report (
     report_id BIGSERIAL PRIMARY KEY,
     issue_id BIGINT NOT NULL REFERENCES issue(issue_id),
     vlm_result_id BIGINT NOT NULL REFERENCES vlm_result(vlm_result_id),
@@ -173,8 +174,8 @@ CREATE TABLE IF NOT EXISTS emergency_report (
     ))
 );
 
-CREATE INDEX IF NOT EXISTS idx_report_issue
+CREATE INDEX idx_report_issue
 ON emergency_report (issue_id, created_at);
 
-CREATE INDEX IF NOT EXISTS idx_report_status
+CREATE INDEX idx_report_status
 ON emergency_report (report_status, created_at);
