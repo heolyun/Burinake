@@ -66,7 +66,6 @@ Burinake/
 │   │   ├── app/schemas/
 │   │   ├── app/services/
 │   │   ├── app/utils/
-│   │   └── models/
 │   └── vlm-server/
 │       ├── app/api/
 │       ├── app/config/
@@ -74,8 +73,7 @@ Burinake/
 │       ├── app/model/
 │       ├── app/schemas/
 │       ├── app/services/
-│       ├── app/utils/
-│       └── models/
+│       └── app/utils/
 ├── infra/
 │   ├── azure/
 │   │   ├── bicep/
@@ -107,6 +105,7 @@ Burinake/
 - `backend`: 인증, 카메라/화재 이벤트 관리, AI 서버 연동, Azure Blob Storage 연동, 신고 지원 API를 담당합니다.
 - `ai/yolo-server`: CCTV 프레임 또는 이미지에서 화재 후보를 탐지하는 YOLO 기반 서버입니다.
 - `ai/vlm-server`: YOLO 탐지 결과를 VLM으로 검증하거나 설명을 생성하는 서버입니다.
+- `/opt/burinake/models/*`: Azure VM에서 별도 유지하는 모델 저장 경로이며 Git과 Docker 빌드 대상에서 제외합니다.
 - `infra/docker`: 공통 Docker 설정, 이미지 빌드 정책, 운영 문서를 둡니다.
 - `infra/nginx`: 운영 환경 reverse proxy 설정을 둡니다.
 - `infra/azure`: Azure Container Apps, Azure Blob Storage, Key Vault, 네트워크 등 클라우드 배포 리소스를 둡니다.
