@@ -5,8 +5,11 @@ cd ~/Burinake
 echo "Pull latest code..."
 git pull --ff-only origin develop
 
-echo "Restart containers..."
-docker compose -f docker-compose.dev.yml up -d --build
+echo "Update frontend, backend, and postgres only..."
+docker compose -f docker-compose.dev.yml up -d --build --no-deps frontend backend postgres
+
+echo "Keep existing AI containers without rebuilding..."
+docker compose -f docker-compose.dev.yml up -d --no-build --no-deps yolo-server vlm-server
 
 echo "Deployment complete."
 docker ps
