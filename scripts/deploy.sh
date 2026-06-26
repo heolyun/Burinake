@@ -2,9 +2,6 @@ set -e
 
 cd ~/Burinake
 
-echo "Pull latest code..."
-git pull --ff-only origin develop
-
 echo "Update frontend, backend, and postgres only..."
 docker compose -f docker-compose.dev.yml up -d --build --no-deps frontend backend postgres
 
