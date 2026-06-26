@@ -27,6 +27,7 @@ backend/build/
 backend/target/
 backend/.gradle/
 backend/out/
+backend/bin/
 
 # Python
 __pycache__/
