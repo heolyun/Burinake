@@ -32,8 +32,6 @@ services:
       AI_VLM_BASE_URL: http://vlm-server:8002
     depends_on:
       - postgres
-      - yolo-server
-      - vlm-server
 
   yolo-server:
     build:

@@ -23,5 +23,5 @@ jobs:
           key: ${{ secrets.AZURE_VM_SSH_KEY }}
           script: |
             cd ~/Burinake
-            git pull --ff-only origin develop
-            docker compose -f docker-compose.dev.yml up -d --build
+            chmod +x scripts/deploy.sh
+            ./scripts/deploy.sh
