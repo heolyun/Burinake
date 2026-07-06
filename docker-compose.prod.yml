@@ -1,19 +1,11 @@
 services:
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-      target: prod
-    image: burinake/frontend:${IMAGE_TAG:-latest}
+    image: ${ACR_LOGIN_SERVER}/burinake-frontend:latest
     depends_on:
       - backend
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      target: prod
-    image: burinake/backend:${IMAGE_TAG:-latest}
+    image: ${ACR_LOGIN_SERVER}/burinake-backend:latest
     environment:
       SPRING_PROFILES_ACTIVE: prod
       SPRING_DATASOURCE_URL: ${SPRING_DATASOURCE_URL}
@@ -24,14 +16,12 @@ services:
       AI_YOLO_BASE_URL: http://yolo-server:8001
       AI_VLM_BASE_URL: http://vlm-server:8002
     depends_on:
+      - postgres
       - yolo-server
       - vlm-server
 
   yolo-server:
-    build:
-      context: ./ai/yolo-server
-      dockerfile: Dockerfile
-    image: burinake/yolo-server:${IMAGE_TAG:-latest}
+    image: ${ACR_LOGIN_SERVER}/burinake-yolo-server:latest
     environment:
       APP_ENV: prod
       MODEL_PATH: /app/models/yolo-fire.pt
@@ -39,15 +29,21 @@ services:
       - ${YOLO_MODEL_DIR:-/opt/burinake/models/yolo}:/app/models
 
   vlm-server:
-    build:
-      context: ./ai/vlm-server
-      dockerfile: Dockerfile
-    image: burinake/vlm-server:${IMAGE_TAG:-latest}
+    image: ${ACR_LOGIN_SERVER}/burinake-vlm-server:latest
     environment:
       APP_ENV: prod
       MODEL_PROVIDER: ${MODEL_PROVIDER:-azure-openai}
     volumes:
       - ${VLM_MODEL_DIR:-/opt/burinake/models/vlm}:/app/models
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-burinake}
+      POSTGRES_USER: ${POSTGRES_USER:-burinake}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   nginx:
     image: nginx:1.27-alpine
@@ -58,3 +54,6 @@ services:
     depends_on:
       - frontend
       - backend
+
+volumes:
+  postgres_data:

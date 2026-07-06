@@ -43,10 +43,6 @@ venv/
 *.onnx
 *.safetensors
 **/models/
-!ai/yolo-server/models/
-!ai/yolo-server/models/.gitkeep
-!ai/vlm-server/models/
-!ai/vlm-server/models/.gitkeep
 **/hf_cache/
 **/.cache/huggingface/
 **/huggingface/

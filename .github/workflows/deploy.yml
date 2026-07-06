@@ -10,9 +10,58 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    environment: develop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to ACR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-frontend:latest
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-backend:latest
+
+      - name: Build and push yolo-server
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai/yolo-server
+          file: ./ai/yolo-server/Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-yolo-server:latest
+
+      - name: Build and push vlm-server
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai/vlm-server
+          file: ./ai/vlm-server/Dockerfile
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-vlm-server:latest
+
   deploy:
     runs-on: ubuntu-latest
     environment: develop
+    needs: build-and-push
 
     steps:
       - name: Deploy via SSH
@@ -25,4 +74,7 @@ jobs:
             cd ~/Burinake
             git pull --ff-only origin develop
             chmod +x scripts/deploy.sh
+            export ACR_LOGIN_SERVER='${{ secrets.ACR_LOGIN_SERVER }}'
+            export ACR_USERNAME='${{ secrets.ACR_USERNAME }}'
+            export ACR_PASSWORD='${{ secrets.ACR_PASSWORD }}'
             ./scripts/deploy.sh

@@ -96,7 +96,6 @@ Burinake/
 ├── .github/workflows/
 ├── docker-compose.dev.yml
 ├── docker-compose.prod.yml
-└── .env.example
 ```
 
 ## Folder Roles
@@ -123,13 +122,12 @@ Burinake/
 
 ## Environments
 
-- Dev: `docker-compose.dev.yml`, `application-dev.yml`, `.env.example`
+- Dev: `docker-compose.dev.yml`, `application-dev.yml`
 - Prod: `docker-compose.prod.yml`, `application-prod.yml`, Azure Bicep parameters
 
 ## Local Start
 
 ```bash
-cp .env.example .env
 docker compose -f docker-compose.dev.yml up --build
 ```
 
