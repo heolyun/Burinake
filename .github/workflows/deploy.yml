@@ -42,22 +42,6 @@ jobs:
           push: true
           tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-backend:latest
 
-      - name: Build and push yolo-server
-        uses: docker/build-push-action@v6
-        with:
-          context: ./ai/yolo-server
-          file: ./ai/yolo-server/Dockerfile
-          push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-yolo-server:latest
-
-      - name: Build and push vlm-server
-        uses: docker/build-push-action@v6
-        with:
-          context: ./ai/vlm-server
-          file: ./ai/vlm-server/Dockerfile
-          push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-vlm-server:latest
-
   deploy:
     runs-on: ubuntu-latest
     environment: develop
