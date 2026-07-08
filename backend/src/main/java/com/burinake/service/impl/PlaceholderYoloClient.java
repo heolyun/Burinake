@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +47,11 @@ class HttpYoloClient implements YoloClient {
             String contentType,
             String originalFilename
     ) {
+        if (!StringUtils.hasText(baseUrl)) {
+            log.warn("yolo-request-skipped imageId={} reason=missing-base-url", imageId);
+            return new YoloResult(false, null, List.of());
+        }
+
         try {
             long startNanos = System.nanoTime();
             String boundary = "----BurinakeBoundary" + ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);

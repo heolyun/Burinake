@@ -18,19 +18,10 @@ services:
       AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-Burinake-vlm}
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
       AZURE_OPENAI_MAX_COMPLETION_TOKENS: ${AZURE_OPENAI_MAX_COMPLETION_TOKENS:-4000}
-      AI_YOLO_BASE_URL: http://yolo-server:8001
+      AI_YOLO_BASE_URL: ""
       AI_VLM_BASE_URL: ""
     depends_on:
       - postgres
-      - yolo-server
-
-  yolo-server:
-    image: ${ACR_LOGIN_SERVER}/burinake-yolo-server:latest
-    environment:
-      APP_ENV: prod
-      MODEL_PATH: /app/models/yolo-fire.pt
-    volumes:
-      - ${YOLO_MODEL_DIR:-/opt/burinake/models/yolo}:/app/models
 
   postgres:
     image: postgres:16-alpine
