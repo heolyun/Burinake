@@ -4,6 +4,7 @@ import com.burinake.domain.VlmResultRow;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
+import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
 
 @Mapper
@@ -11,6 +12,13 @@ public interface VlmResultMapper {
 
     @Select("SELECT nextval('vlm_result_vlm_result_id_seq')")
     Long nextId();
+
+    @Select("""
+            SELECT COALESCE(MAX(analysis_round), 0) + 1
+            FROM vlm_result
+            WHERE issue_id = #{issueId}
+            """)
+    Integer nextAnalysisRound(@Param("issueId") Long issueId);
 
     @Insert("""
             INSERT INTO vlm_result (

@@ -88,6 +88,13 @@ CREATE TABLE issue (
     latest_level SMALLINT,
     latest_message TEXT,
     vlm_analyzed_at TIMESTAMPTZ,
+    last_detected_at TIMESTAMPTZ,
+    last_yolo_analyzed_at TIMESTAMPTZ,
+    last_vlm_analyzed_at TIMESTAMPTZ,
+    last_notified_at TIMESTAMPTZ,
+    max_box_area_ratio NUMERIC(8,6),
+    last_box_area_ratio NUMERIC(8,6),
+    snapshot_count INT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT chk_issue_type CHECK (issue_type IN ('FIRE', 'SMOKE', 'FIRE_SMOKE')),
@@ -110,6 +117,9 @@ ON issue (issue_type, issue_status, detected_at);
 
 CREATE INDEX idx_issue_latest_level
 ON issue (latest_level, detected_at);
+
+CREATE INDEX idx_issue_open_tracking
+ON issue (cctv_id, issue_status, last_detected_at);
 
 CREATE TABLE issue_snapshot (
     issue_snapshot_id BIGSERIAL PRIMARY KEY,

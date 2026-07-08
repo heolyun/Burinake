@@ -14,5 +14,5 @@ azure:
     blob-container: ${AZURE_BLOB_CONTAINER:fire-events}
 
 ai:
-  yolo-base-url: ${AI_YOLO_BASE_URL:http://localhost:8001}
+  yolo-base-url: ${AI_YOLO_BASE_URL:http://localhost:8000}
   vlm-base-url: ${AI_VLM_BASE_URL:http://localhost:8002}

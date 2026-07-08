@@ -1,10 +1,10 @@
 package com.burinake.dto;
 
 public record BoundingBox(
-        int x,
-        int y,
-        int width,
-        int height,
+        double x,
+        double y,
+        double width,
+        double height,
         String label,
         Double score
 ) {

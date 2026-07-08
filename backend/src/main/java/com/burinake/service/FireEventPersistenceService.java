@@ -3,9 +3,11 @@ package com.burinake.service;
 import com.burinake.domain.CctvRow;
 import com.burinake.domain.DetectionBoxRow;
 import com.burinake.domain.FireEventPersistCommand;
+import com.burinake.domain.FireSnapshotPersistCommand;
 import com.burinake.domain.IssueRow;
 import com.burinake.domain.IssueSnapshotRow;
 import com.burinake.domain.SnapshotImageRow;
+import com.burinake.domain.SnapshotPersistResult;
 import com.burinake.domain.VlmResultRow;
 import com.burinake.domain.YoloResultRow;
 import com.burinake.dto.BoundingBox;
@@ -22,6 +24,7 @@ import com.burinake.mapper.YoloResultMapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import org.springframework.stereotype.Service;
@@ -62,6 +65,118 @@ public class FireEventPersistenceService {
 
     public Long nextSnapshotImageId() {
         return snapshotImageMapper.nextId();
+    }
+
+    @Transactional
+    public SnapshotPersistResult persistSnapshot(FireSnapshotPersistCommand command) {
+        CctvRow cctv = resolveCctv(command.cctvName(), command.cctvNum(), command.source());
+        OffsetDateTime now = OffsetDateTime.now();
+
+        SnapshotImageRow snapshotImage = new SnapshotImageRow(
+                command.imageId(),
+                cctv.cctvId(),
+                command.storageProvider(),
+                command.storageContainer(),
+                command.storageKey(),
+                command.imageUrl(),
+                command.contentType(),
+                command.fileSizeBytes(),
+                command.widthPx(),
+                command.heightPx(),
+                command.snapshotTime(),
+                buildRawMetadata(command),
+                now
+        );
+        snapshotImageMapper.insert(snapshotImage);
+
+        IssueRow openIssue = issueMapper.findOpenByCctv(cctv.cctvId(), command.snapshotTime());
+        if (openIssue != null) {
+            attachSnapshot(openIssue.issueId(), command.imageId(), command.snapshotTime(), false, now);
+            issueMapper.touchSnapshot(openIssue.issueId(), command.snapshotTime(), now);
+        }
+
+        return new SnapshotPersistResult(cctv, snapshotImage, openIssue);
+    }
+
+    @Transactional
+    public void persistNewAnalysis(SnapshotPersistResult context, YoloResult yoloResult, VlmResult vlmResult) {
+        OffsetDateTime now = OffsetDateTime.now();
+        SnapshotImageRow snapshotImage = context.snapshotImage();
+        Long yoloResultId = persistYoloResult(snapshotImage.imageId(), yoloResult, now);
+
+        if (!yoloResult.detected()) {
+            return;
+        }
+
+        String issueType = deriveIssueType(yoloResult);
+        BigDecimal boxAreaRatio = calculateBoxAreaRatio(yoloResult, snapshotImage);
+        Long issueId = issueMapper.nextId();
+        IssueRow issue = new IssueRow(
+                issueId,
+                context.cctv().cctvId(),
+                snapshotImage.imageId(),
+                yoloResultId,
+                issueType,
+                "VLM_ANALYZING",
+                snapshotImage.snapshotTime(),
+                snapshotImage.snapshotTime(),
+                snapshotImage.snapshotTime(),
+                null,
+                null,
+                null,
+                null,
+                snapshotImage.snapshotTime(),
+                now,
+                null,
+                null,
+                boxAreaRatio,
+                boxAreaRatio,
+                1,
+                now,
+                now
+        );
+        issueMapper.insert(issue);
+        attachSnapshot(issueId, snapshotImage.imageId(), snapshotImage.snapshotTime(), true, now);
+        persistVlmResult(issueId, 1, yoloResult, vlmResult, now);
+        updateIssueWithVlm(issueId, vlmResult, yoloResult, boxAreaRatio, now);
+    }
+
+    @Transactional
+    public void persistExistingAnalysis(IssueRow issue, SnapshotImageRow snapshotImage, YoloResult yoloResult, VlmResult vlmResult) {
+        OffsetDateTime now = OffsetDateTime.now();
+        persistYoloResult(snapshotImage.imageId(), yoloResult, now);
+
+        if (!yoloResult.detected()) {
+            issueMapper.updateYoloTracking(
+                    issue.issueId(),
+                    issue.issueType(),
+                    issue.issueStatus(),
+                    snapshotImage.snapshotTime(),
+                    now,
+                    BigDecimal.ZERO,
+                    now
+            );
+            return;
+        }
+
+        String issueType = maxIssueType(issue.issueType(), deriveIssueType(yoloResult));
+        BigDecimal boxAreaRatio = calculateBoxAreaRatio(yoloResult, snapshotImage);
+        issueMapper.updateYoloTracking(
+                issue.issueId(),
+                issueType,
+                issue.issueStatus(),
+                snapshotImage.snapshotTime(),
+                now,
+                boxAreaRatio,
+                now
+        );
+
+        if (vlmResult == null) {
+            return;
+        }
+
+        persistVlmResult(issue.issueId(), vlmResultMapper.nextAnalysisRound(issue.issueId()), yoloResult, vlmResult, now);
+        updateIssueWithVlm(issue.issueId(), vlmResult, yoloResult, boxAreaRatio, now);
     }
 
     @Transactional
@@ -127,6 +242,13 @@ public class FireEventPersistenceService {
                 null,
                 null,
                 null,
+                command.snapshotTime(),
+                now,
+                null,
+                null,
+                calculateBoxAreaRatio(yoloResult, snapshotImage),
+                calculateBoxAreaRatio(yoloResult, snapshotImage),
+                1,
                 now,
                 now
         );
@@ -175,7 +297,99 @@ public class FireEventPersistenceService {
                 mapLevel(vlmResult.riskLevel()),
                 vlmResult.recommendedAction(),
                 now,
+                now,
+                now,
+                now,
                 null,
+                calculateBoxAreaRatio(yoloResult, snapshotImage),
+                calculateBoxAreaRatio(yoloResult, snapshotImage),
+                null,
+                null,
+                now
+        ));
+    }
+
+    private Long persistYoloResult(Long imageId, YoloResult yoloResult, OffsetDateTime now) {
+        YoloResultRow yoloResultRow = new YoloResultRow(
+                yoloResultMapper.nextId(),
+                imageId,
+                "YOLO",
+                null,
+                1,
+                yoloResult.detected(),
+                hasSmoke(yoloResult),
+                yoloResult.detected() ? asBigDecimal(yoloResult.confidence()) : null,
+                hasSmoke(yoloResult) ? asBigDecimal(yoloResult.confidence()) : null,
+                toJson(yoloResult),
+                now
+        );
+        yoloResultMapper.insert(yoloResultRow);
+
+        int boxOrder = 1;
+        for (BoundingBox box : yoloResult.boxes()) {
+            DetectionBoxRow detectionBox = toDetectionBoxRow(yoloResultRow.yoloResultId(), box, now, boxOrder++);
+            detectionBoxMapper.insert(detectionBox);
+        }
+
+        return yoloResultRow.yoloResultId();
+    }
+
+    private void persistVlmResult(Long issueId, Integer analysisRound, YoloResult yoloResult, VlmResult vlmResult, OffsetDateTime now) {
+        VlmResultRow vlmResultRow = new VlmResultRow(
+                vlmResultMapper.nextId(),
+                issueId,
+                analysisRound,
+                "VLM",
+                null,
+                isRealFire(vlmResult),
+                null,
+                null,
+                vlmResult.summary(),
+                mapLevel(vlmResult.riskLevel()),
+                vlmResult.recommendedAction(),
+                asBigDecimal(yoloResult.confidence()),
+                toJson(vlmResult),
+                now
+        );
+        vlmResultMapper.insert(vlmResultRow);
+    }
+
+    private void updateIssueWithVlm(Long issueId, VlmResult vlmResult, YoloResult yoloResult, BigDecimal boxAreaRatio, OffsetDateTime now) {
+        issueMapper.updateLatest(new IssueRow(
+                issueId,
+                null,
+                null,
+                null,
+                null,
+                isRealFire(vlmResult) ? "REAL_FIRE" : "FALSE_ALARM",
+                null,
+                null,
+                null,
+                isRealFire(vlmResult),
+                mapLevel(vlmResult.riskLevel()),
+                vlmResult.recommendedAction(),
+                now,
+                null,
+                now,
+                now,
+                now,
+                boxAreaRatio,
+                boxAreaRatio,
+                null,
+                null,
+                now
+        ));
+    }
+
+    private void attachSnapshot(Long issueId, Long imageId, OffsetDateTime snapshotTime, boolean triggerImage, OffsetDateTime now) {
+        Integer sequenceNo = issueSnapshotMapper.nextSequenceNo(issueId);
+        issueSnapshotMapper.insert(new IssueSnapshotRow(
+                issueSnapshotMapper.nextId(),
+                issueId,
+                imageId,
+                sequenceNo,
+                0,
+                triggerImage,
                 now
         ));
     }
@@ -230,6 +444,38 @@ public class FireEventPersistenceService {
         );
     }
 
+    private BigDecimal calculateBoxAreaRatio(YoloResult yoloResult, SnapshotImageRow snapshotImage) {
+        if (snapshotImage.widthPx() == null || snapshotImage.heightPx() == null) {
+            return BigDecimal.ZERO;
+        }
+        double imageArea = (double) snapshotImage.widthPx() * snapshotImage.heightPx();
+        if (imageArea <= 0) {
+            return BigDecimal.ZERO;
+        }
+        double maxArea = yoloResult.boxes().stream()
+                .mapToDouble(box -> Math.max(0, box.width()) * Math.max(0, box.height()))
+                .max()
+                .orElse(0);
+        return BigDecimal.valueOf(maxArea / imageArea).setScale(6, RoundingMode.HALF_UP);
+    }
+
+    private String maxIssueType(String currentType, String nextType) {
+        return typeSeverity(nextType) > typeSeverity(currentType) ? nextType : currentType;
+    }
+
+    private int typeSeverity(String issueType) {
+        if ("FIRE_SMOKE".equals(issueType)) {
+            return 3;
+        }
+        if ("FIRE".equals(issueType)) {
+            return 2;
+        }
+        if ("SMOKE".equals(issueType)) {
+            return 1;
+        }
+        return 0;
+    }
+
     private boolean hasSmoke(YoloResult yoloResult) {
         return yoloResult.boxes().stream()
                 .anyMatch(box -> box.label() != null && box.label().toLowerCase().contains("smoke"));
@@ -274,6 +520,20 @@ public class FireEventPersistenceService {
     }
 
     private String buildRawMetadata(FireEventPersistCommand command) {
+        LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("source", command.source());
+        metadata.put("originalFilename", command.originalFilename());
+        metadata.put("snapshotTime", command.snapshotTime());
+        metadata.put("storageProvider", command.storageProvider());
+        metadata.put("storageContainer", command.storageContainer());
+        metadata.put("storageKey", command.storageKey());
+        metadata.put("imageUrl", command.imageUrl());
+        metadata.put("contentType", command.contentType());
+        metadata.put("fileSizeBytes", command.fileSizeBytes());
+        return toJson(metadata);
+    }
+
+    private String buildRawMetadata(FireSnapshotPersistCommand command) {
         LinkedHashMap<String, Object> metadata = new LinkedHashMap<>();
         metadata.put("source", command.source());
         metadata.put("originalFilename", command.originalFilename());

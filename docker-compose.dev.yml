@@ -28,7 +28,7 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-burinake_dev_password}
       AZURE_STORAGE_CONNECTION_STRING: ${AZURE_STORAGE_CONNECTION_STRING:-UseDevelopmentStorage=true}
       AZURE_BLOB_CONTAINER: ${AZURE_BLOB_CONTAINER:-fire-events}
-      AI_YOLO_BASE_URL: http://yolo-server:8001
+      AI_YOLO_BASE_URL: ${AI_YOLO_BASE_URL:-http://host.docker.internal:8000}
       AI_VLM_BASE_URL: http://vlm-server:8002
     depends_on:
       - postgres
