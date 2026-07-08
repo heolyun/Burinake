@@ -12,3 +12,11 @@ management:
     web:
       exposure:
         include: health,info
+
+azure:
+  openai:
+    endpoint: ${AZURE_OPENAI_ENDPOINT:}
+    api-key: ${AZURE_OPENAI_API_KEY:}
+    deployment-name: ${AZURE_OPENAI_DEPLOYMENT_NAME:Burinake-vlm}
+    api-version: ${AZURE_OPENAI_API_VERSION:2024-02-15-preview}
+    max-completion-tokens: ${AZURE_OPENAI_MAX_COMPLETION_TOKENS:4000}

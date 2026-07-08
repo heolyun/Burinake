@@ -250,7 +250,7 @@ public class FireEventPersistenceService {
     }
 
     private boolean isRealFire(VlmResult vlmResult) {
-        return vlmResult.riskLevel() == RiskLevel.HIGH;
+        return vlmResult.fireConfirmed();
     }
 
     private Integer mapLevel(RiskLevel riskLevel) {

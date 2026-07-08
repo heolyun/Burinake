@@ -12,6 +12,12 @@ azure:
   storage:
     connection-string: ${AZURE_STORAGE_CONNECTION_STRING:}
     blob-container: ${AZURE_BLOB_CONTAINER:fire-events}
+  openai:
+    endpoint: ${AZURE_OPENAI_ENDPOINT:}
+    api-key: ${AZURE_OPENAI_API_KEY:}
+    deployment-name: ${AZURE_OPENAI_DEPLOYMENT_NAME:Burinake-vlm}
+    api-version: ${AZURE_OPENAI_API_VERSION:2024-02-15-preview}
+    max-completion-tokens: ${AZURE_OPENAI_MAX_COMPLETION_TOKENS:4000}
 
 ai:
   yolo-base-url: ${AI_YOLO_BASE_URL:http://localhost:8001}
