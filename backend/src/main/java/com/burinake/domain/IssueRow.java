@@ -1,5 +1,6 @@
 package com.burinake.domain;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
 public record IssueRow(
@@ -16,6 +17,13 @@ public record IssueRow(
         Integer latestLevel,
         String latestMessage,
         OffsetDateTime vlmAnalyzedAt,
+        OffsetDateTime lastDetectedAt,
+        OffsetDateTime lastYoloAnalyzedAt,
+        OffsetDateTime lastVlmAnalyzedAt,
+        OffsetDateTime lastNotifiedAt,
+        BigDecimal maxBoxAreaRatio,
+        BigDecimal lastBoxAreaRatio,
+        Integer snapshotCount,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt
 ) {

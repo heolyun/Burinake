@@ -1,4 +1,4 @@
-﻿package com.burinake.dto.ai;
+package com.burinake.dto.ai;
 
 import com.burinake.dto.RiskLevel;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;

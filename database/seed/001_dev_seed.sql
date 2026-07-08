@@ -67,7 +67,14 @@ seeded_issue AS (
         latest_is_real_fire,
         latest_level,
         latest_message,
-        vlm_analyzed_at
+        vlm_analyzed_at,
+        last_detected_at,
+        last_yolo_analyzed_at,
+        last_vlm_analyzed_at,
+        last_notified_at,
+        max_box_area_ratio,
+        last_box_area_ratio,
+        snapshot_count
     )
     SELECT
         i.cctv_id,
@@ -81,7 +88,14 @@ seeded_issue AS (
         true,
         3,
         'Possible fire detected. On-site verification is required.',
-        now()
+        now(),
+        i.snapshot_time,
+        now(),
+        now(),
+        now(),
+        0.050000,
+        0.050000,
+        1
     FROM seeded_image i
     JOIN seeded_yolo y ON y.image_id = i.image_id
     RETURNING issue_id, trigger_image_id

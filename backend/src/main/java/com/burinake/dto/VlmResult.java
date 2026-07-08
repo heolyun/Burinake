@@ -1,4 +1,4 @@
-﻿package com.burinake.dto;
+package com.burinake.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.PropertyNamingStrategies;
@@ -180,7 +180,7 @@ public record VlmResult(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record DetectedBbox(
+    public static record DetectedBbox(
             Double x,
             Double y,
             Double width,
@@ -192,7 +192,7 @@ public record VlmResult(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record TimelineSummaryItem(
+    public static record TimelineSummaryItem(
             Integer frameIndex,
             Integer timeOffsetS,
             String observation
@@ -201,7 +201,7 @@ public record VlmResult(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record VisualCause(
+    public static record VisualCause(
             String mostLikely,
             List<String> likelyIgnitionMechanisms,
             String confidenceExplanation
@@ -213,7 +213,7 @@ public record VlmResult(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record FireLocationDetail(
+    public static record FireLocationDetail(
             String cctvId,
             String siteMetadataLocation,
             String capturedAt,
@@ -223,7 +223,7 @@ public record VlmResult(
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     @JsonNaming(PropertyNamingStrategies.SnakeCaseStrategy.class)
-    public record RiskAssessment(
+    public static record RiskAssessment(
             String level,
             String rationale,
             String currentFireSizeEstimate,

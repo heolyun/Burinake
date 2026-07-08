@@ -15,10 +15,13 @@ import java.time.LocalDate;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 class AzureBlobImageStorageService implements ImageStorageService {
 
+    private static final Logger log = LoggerFactory.getLogger(AzureBlobImageStorageService.class);
     private final AzureStorageProperties azureStorageProperties;
 
     public AzureBlobImageStorageService(AzureStorageProperties azureStorageProperties) {
@@ -40,10 +43,16 @@ class AzureBlobImageStorageService implements ImageStorageService {
                 imageId
         );
 
+        long startNanos = System.nanoTime();
         try {
-            return uploadToAzure(image, blobPath);
+            StoredImage storedImage = uploadToAzure(image, blobPath);
+            log.info("image-store-complete imageId={} provider={} elapsedMs={}", imageId, storedImage.storageProvider(), elapsedMillis(startNanos));
+            return storedImage;
         } catch (Exception ex) {
-            return storeLocally(image, blobPath);
+            log.warn("image-store-azure-failed imageId={} elapsedMs={} message={}", imageId, elapsedMillis(startNanos), ex.getMessage());
+            StoredImage storedImage = storeLocally(image, blobPath);
+            log.info("image-store-complete imageId={} provider={} elapsedMs={}", imageId, storedImage.storageProvider(), elapsedMillis(startNanos));
+            return storedImage;
         }
     }
 
@@ -90,5 +99,9 @@ class AzureBlobImageStorageService implements ImageStorageService {
                 image.getContentType(),
                 Files.size(localPath)
         );
+    }
+
+    private long elapsedMillis(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
     }
 }
