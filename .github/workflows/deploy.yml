@@ -61,4 +61,6 @@ jobs:
             export ACR_LOGIN_SERVER='${{ secrets.ACR_LOGIN_SERVER }}'
             export ACR_USERNAME='${{ secrets.ACR_USERNAME }}'
             export ACR_PASSWORD='${{ secrets.ACR_PASSWORD }}'
+            export AZURE_STORAGE_CONNECTION_STRING='${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}'
+            export AZURE_BLOB_CONTAINER='${{ secrets.AZURE_BLOB_CONTAINER }}'
             ./scripts/deploy.sh

@@ -8,6 +8,12 @@ public interface ImageStorageService {
 
     StoredImage storeOriginal(MultipartFile image, Long imageId, LocalDate capturedDate) throws IOException;
 
+    StoredImage storeSnapshot(MultipartFile image, Long imageId, LocalDate capturedDate) throws IOException;
+
+    StoredImage storeFireEvent(MultipartFile image, Long imageId, LocalDate capturedDate) throws IOException;
+
+    StoredImage storeReport(MultipartFile file, Long reportId, LocalDate createdDate) throws IOException;
+
     record StoredImage(
             String blobPath,
             String blobUrl,

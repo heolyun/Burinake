@@ -203,7 +203,7 @@ public class DefaultFireDetectionService implements FireDetectionService {
     }
 
     private String buildBlobPath(Long imageId, LocalDate capturedDate) {
-        return "fire-events/%d/%02d/%02d/%s/original.jpg".formatted(
+        return "snapshots/%d/%02d/%02d/%s/original.jpg".formatted(
                 capturedDate.getYear(),
                 capturedDate.getMonthValue(),
                 capturedDate.getDayOfMonth(),
