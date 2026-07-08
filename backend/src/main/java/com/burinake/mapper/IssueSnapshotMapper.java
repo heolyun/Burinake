@@ -1,6 +1,7 @@
 package com.burinake.mapper;
 
 import com.burinake.domain.IssueSnapshotRow;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -28,7 +29,20 @@ public interface IssueSnapshotMapper {
                 #{issueSnapshotId}, #{issueId}, #{imageId}, #{sequenceNo}, #{relativeSeconds},
                 #{isTriggerImage}, #{createdAt}
             )
-            """)
+    """)
     @Options(useGeneratedKeys = false)
     int insert(IssueSnapshotRow issueSnapshot);
+
+    @Select("""
+            SELECT si.storage_key
+            FROM issue_snapshot isnap
+            JOIN snapshot_image si ON si.image_id = isnap.image_id
+            WHERE isnap.issue_id = #{issueId}
+            ORDER BY isnap.sequence_no DESC
+            LIMIT #{limit}
+            """)
+    List<String> findRecentStorageKeys(
+            @Param("issueId") Long issueId,
+            @Param("limit") int limit
+    );
 }

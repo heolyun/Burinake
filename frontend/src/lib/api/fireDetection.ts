@@ -19,10 +19,52 @@ export type YoloResult = {
   boxes: BoundingBox[];
 };
 
+export type DetectedBbox = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  label: string;
+  source: string;
+};
+
+export type TimelineSummaryItem = {
+  frame_index: number;
+  time_offset_s: number;
+  observation: string;
+};
+
+export type VisualCause = {
+  most_likely: string;
+  likely_ignition_mechanisms: string[];
+  confidence_explanation: string;
+};
+
+export type FireLocationDetail = {
+  cctv_id: string;
+  site_metadata_location: string;
+  captured_at: string;
+  precise_zone: string;
+};
+
+export type RiskAssessment = {
+  level: string;
+  rationale: string;
+  current_fire_size_estimate: string;
+  people_presence: string;
+};
+
 export type VlmResult = {
-  summary: string;
-  riskLevel: RiskLevel;
-  recommendedAction: string;
+  fire_confirmed: boolean;
+  confidence: number | null;
+  detected_bbox: DetectedBbox;
+  timeline_summary: TimelineSummaryItem[];
+  visual_cause: VisualCause;
+  fire_location_detail: FireLocationDetail;
+  risk_assessment: RiskAssessment;
+  recommended_actions: string[];
+  notes: string;
+  emergency_report_korean_narrative: string;
 };
 
 export type FireDetectionResponse = {

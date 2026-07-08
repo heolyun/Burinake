@@ -18,10 +18,13 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 class HttpYoloClient implements YoloClient {
 
+    private static final Logger log = LoggerFactory.getLogger(HttpYoloClient.class);
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String baseUrl;
@@ -44,6 +47,7 @@ class HttpYoloClient implements YoloClient {
             String originalFilename
     ) {
         try {
+            long startNanos = System.nanoTime();
             String boundary = "----BurinakeBoundary" + ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
             MultipartFormDataBuilder.MultipartBody body = MultipartFormDataBuilder.build(
                     boundary,
@@ -67,6 +71,7 @@ class HttpYoloClient implements YoloClient {
                     .build();
 
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            log.info("yolo-request-complete imageId={} statusCode={} elapsedMs={}", imageId, response.statusCode(), elapsedMillis(startNanos));
             if (response.statusCode() >= 400) {
                 throw new IllegalStateException("YOLO server returned " + response.statusCode());
             }
@@ -100,5 +105,9 @@ class HttpYoloClient implements YoloClient {
                 .filter(score -> score != null)
                 .max(Double::compareTo)
                 .orElse(null);
+    }
+
+    private long elapsedMillis(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
     }
 }

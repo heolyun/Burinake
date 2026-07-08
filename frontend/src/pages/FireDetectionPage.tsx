@@ -130,7 +130,7 @@ export function FireDetectionPage() {
           {result ? (
             <div className="message-box">
               <strong>{result.status}</strong>
-              <div>{result.vlmResult.summary}</div>
+              <div>{result.vlmResult.emergency_report_korean_narrative}</div>
             </div>
           ) : null}
         </form>
@@ -156,6 +156,14 @@ export function FireDetectionPage() {
               <dd>{result ? result.riskLevel : '-'}</dd>
             </div>
             <div>
+              <dt>fire_confirmed</dt>
+              <dd>{result ? (result.vlmResult.fire_confirmed ? 'true' : 'false') : '-'}</dd>
+            </div>
+            <div>
+              <dt>confidence</dt>
+              <dd>{result && result.vlmResult.confidence != null ? result.vlmResult.confidence.toFixed(2) : '-'}</dd>
+            </div>
+            <div>
               <dt>imageId</dt>
               <dd>{result ? result.imageId : '-'}</dd>
             </div>
@@ -167,7 +175,7 @@ export function FireDetectionPage() {
 
           <div className="message-box">
             <strong>VLM 요약</strong>
-            <div>{result ? result.vlmResult.summary : '아직 전송된 요청이 없습니다.'}</div>
+            <div>{result ? result.vlmResult.emergency_report_korean_narrative : '아직 전송된 요청이 없습니다.'}</div>
           </div>
 
           <div className="message-box">

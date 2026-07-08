@@ -30,10 +30,13 @@ import java.util.LinkedHashMap;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class FireEventPersistenceService {
 
+    private static final Logger log = LoggerFactory.getLogger(FireEventPersistenceService.class);
     private final CctvMapper cctvMapper;
     private final SnapshotImageMapper snapshotImageMapper;
     private final YoloResultMapper yoloResultMapper;
@@ -69,6 +72,7 @@ public class FireEventPersistenceService {
 
     @Transactional
     public SnapshotPersistResult persistSnapshot(FireSnapshotPersistCommand command) {
+        long startNanos = System.nanoTime();
         CctvRow cctv = resolveCctv(command.cctvName(), command.cctvNum(), command.source());
         OffsetDateTime now = OffsetDateTime.now();
 
@@ -87,14 +91,23 @@ public class FireEventPersistenceService {
                 buildRawMetadata(command),
                 now
         );
+        long insertStartNanos = System.nanoTime();
         snapshotImageMapper.insert(snapshotImage);
+        log.info("persist-snapshot-image-complete imageId={} cctvId={} elapsedMs={}", command.imageId(), cctv.cctvId(), elapsedMillis(insertStartNanos));
 
+        long openIssueStartNanos = System.nanoTime();
         IssueRow openIssue = issueMapper.findOpenByCctv(cctv.cctvId(), command.snapshotTime());
+        log.info("persist-snapshot-open-issue-complete imageId={} cctvId={} found={} elapsedMs={}",
+                command.imageId(), cctv.cctvId(), openIssue != null, elapsedMillis(openIssueStartNanos));
         if (openIssue != null) {
+            long touchStartNanos = System.nanoTime();
             attachSnapshot(openIssue.issueId(), command.imageId(), command.snapshotTime(), false, now);
             issueMapper.touchSnapshot(openIssue.issueId(), command.snapshotTime(), now);
+            log.info("persist-snapshot-touch-complete imageId={} issueId={} elapsedMs={}",
+                    command.imageId(), openIssue.issueId(), elapsedMillis(touchStartNanos));
         }
 
+        log.info("persist-snapshot-finish imageId={} elapsedMs={}", command.imageId(), elapsedMillis(startNanos));
         return new SnapshotPersistResult(cctv, snapshotImage, openIssue);
     }
 
@@ -413,6 +426,10 @@ public class FireEventPersistenceService {
         return cctv;
     }
 
+    private long elapsedMillis(long startNanos) {
+        return (System.nanoTime() - startNanos) / 1_000_000L;
+    }
+
     private DetectionBoxRow toDetectionBoxRow(Long yoloResultId, BoundingBox box, OffsetDateTime now, int boxOrder) {
         boolean smoke = box.label() != null && box.label().toLowerCase().contains("smoke");
         String detectionType = smoke ? "SMOKE" : "FIRE";
@@ -496,7 +513,7 @@ public class FireEventPersistenceService {
     }
 
     private boolean isRealFire(VlmResult vlmResult) {
-        return vlmResult.riskLevel() == RiskLevel.HIGH;
+        return vlmResult.fireConfirmed();
     }
 
     private Integer mapLevel(RiskLevel riskLevel) {
