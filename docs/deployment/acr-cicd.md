@@ -1,43 +1,68 @@
-# ACR-Based CI/CD
+# AKS CI/CD
 
 ## Deployment Flow
 
-1. A push to `develop` triggers GitHub Actions.
-2. GitHub Actions builds `frontend` and `backend`.
-3. The built images are pushed to Azure Container Registry.
-4. `yolo-server` and `vlm-server` images are managed separately and pushed to ACR manually when needed.
-5. GitHub Actions connects to the Azure VM over SSH.
-6. The VM logs in to ACR, pulls the latest images, and runs `docker compose -f docker-compose.prod.yml up -d`.
-7. The VM does not run `docker compose build` and does not build images locally.
+1. A push to `develop` deploys the DEV environment.
+2. A push to `main` deploys the PRD environment.
+3. GitHub Actions logs in to Azure with OIDC.
+4. GitHub Actions logs in to Azure Container Registry.
+5. Frontend and backend images are built and pushed to ACR.
+6. Kubernetes manifests are applied to AKS.
+7. The related deployments are restarted so they pull the latest image tags.
+8. The public health endpoint is checked after rollout.
 
-## Why This Helps
+## Environments
 
-- Heavy AI images are not rebuilt during ordinary application deployments.
-- The VM only pulls ready-made images, which reduces local disk pressure during deployment.
-- The previous `no space left on device` failure path is reduced because the VM is no longer unpacking large build stages for every deploy.
+| Branch or trigger | Namespace | URL |
+| --- | --- | --- |
+| `develop` push | `burinake-dev` | `https://dev-burinake.20.249.106.231.nip.io` |
+| `main` push | `burinake` | `https://burinake.20.249.106.231.nip.io` |
+| Manual dispatch | selected in workflow | selected in workflow |
+
+## GitHub Secrets
+
+The workflow uses Azure OIDC, so it does not need an Azure client secret or ACR password.
+
+Required repository secrets:
+
+- `AZURE_CLIENT_ID`
+- `AZURE_TENANT_ID`
+- `AZURE_SUBSCRIPTION_ID`
+
+Current Azure values:
+
+- `AZURE_CLIENT_ID`: `92ea9c79-a5f4-4a1b-94b5-01d41e1e0703`
+- `AZURE_TENANT_ID`: `3da85eb2-33fa-45ff-b012-e413d0c7297d`
+- `AZURE_SUBSCRIPTION_ID`: `f2f8b7f1-d665-45ce-a219-e9f5d043f061`
+
+`AZURE_CLIENT_ID` is the app ID of the Azure app registration used by GitHub Actions.
+
+## Azure Permissions
+
+The GitHub Actions identity needs:
+
+- `AcrPush` on `burinakeacr`
+- `Azure Kubernetes Service Cluster Admin Role` on `burinake-aks`
+
+The workflow uses `az aks get-credentials --admin` because it applies Kubernetes manifests and restarts deployments.
 
 ## AI Image Policy
 
-- `yolo-server` and `vlm-server` are not built by the regular `develop` deployment workflow.
-- Those images must already exist in Azure Container Registry before a deployment that references them.
-- Update AI images only when the AI server code or runtime actually changes.
+Regular branch deployments build only:
 
-## Required GitHub Secrets
+- `burinake-frontend`
+- `burinake-backend`
 
-- `ACR_LOGIN_SERVER`
-- `ACR_USERNAME`
-- `ACR_PASSWORD`
-- `AZURE_STORAGE_CONNECTION_STRING`
-- `AZURE_BLOB_CONTAINER`
-- `AZURE_VM_HOST`
-- `AZURE_VM_USER`
-- `AZURE_VM_SSH_KEY`
+YOLO and VLM images are built only from manual workflow dispatch with `build_ai_images=true`.
+This keeps ordinary deployments lighter and avoids rebuilding heavy AI images when only the web or API code changed.
 
-## VM Runtime Requirements
+## Runtime Services
 
-- Docker and Docker Compose installed
-- Repository checked out at `~/Burinake`
-- Model directories kept outside the repo:
-  - `/opt/burinake/models/yolo`
-  - `/opt/burinake/models/vlm`
-- A `.env` file or exported environment variables for runtime settings such as datasource and Azure storage credentials
+The deployed AKS system depends on these Azure resources:
+
+- AKS: `burinake-aks`
+- ACR: `burinakeacr.azurecr.io`
+- Key Vault: `burinake-kv-368x19`
+- PostgreSQL Flexible Server: `burinake-pg-368x19.postgres.database.azure.com`
+- Storage Account: `burinakestorage`
+- Azure OpenAI / AI Foundry: `burinakeai-resource`

@@ -1,8 +1,20 @@
 name: Deploy to AKS
 
 on:
+  push:
+    branches:
+      - develop
+      - main
   workflow_dispatch:
     inputs:
+      target_environment:
+        description: Target AKS environment
+        required: true
+        default: dev
+        type: choice
+        options:
+          - dev
+          - prd
       build_images:
         description: Build and push frontend/backend images before deploying
         required: true
@@ -11,76 +23,160 @@ on:
         options:
           - "true"
           - "false"
+      build_ai_images:
+        description: Build and push yolo/vlm images before deploying
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: read
+  id-token: write
 
 concurrency:
-  group: deploy-aks
+  group: deploy-aks-${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || github.ref_name }}
   cancel-in-progress: false
+
+env:
+  AZURE_RESOURCE_GROUP: Burinake
+  AKS_CLUSTER_NAME: burinake-aks
+  ACR_NAME: burinakeacr
+  ACR_LOGIN_SERVER: burinakeacr.azurecr.io
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: aks
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.target_environment || (github.ref_name == 'main' && 'prd' || 'dev') }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Resolve deployment target
+        id: target
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            target_environment="${{ inputs.target_environment }}"
+          elif [[ "${{ github.ref_name }}" == "main" ]]; then
+            target_environment="prd"
+          else
+            target_environment="dev"
+          fi
+
+          if [[ "$target_environment" == "prd" ]]; then
+            echo "namespace=burinake" >> "$GITHUB_OUTPUT"
+            echo "kustomize_path=infra/k8s" >> "$GITHUB_OUTPUT"
+            echo "health_url=https://burinake.20.249.106.231.nip.io/actuator/health" >> "$GITHUB_OUTPUT"
+          else
+            echo "namespace=burinake-dev" >> "$GITHUB_OUTPUT"
+            echo "kustomize_path=infra/k8s/environments/dev" >> "$GITHUB_OUTPUT"
+            echo "health_url=https://dev-burinake.20.249.106.231.nip.io/actuator/health" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "environment=$target_environment" >> "$GITHUB_OUTPUT"
+
       - name: Azure login
         uses: azure/login@v2
         with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
       - name: Log in to ACR
-        if: ${{ inputs.build_images == 'true' }}
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ secrets.ACR_LOGIN_SERVER }}
-          username: ${{ secrets.ACR_USERNAME }}
-          password: ${{ secrets.ACR_PASSWORD }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_images == 'true' || inputs.build_ai_images == 'true' }}
+        run: az acr login --name "$ACR_NAME"
 
       - name: Build and push frontend
-        if: ${{ inputs.build_images == 'true' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_images == 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
           target: prod
           push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-frontend:latest
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-frontend:latest
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-frontend:${{ github.sha }}
 
       - name: Build and push backend
-        if: ${{ inputs.build_images == 'true' }}
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.build_images == 'true' }}
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
           target: prod
           push: true
-          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-backend:latest
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-backend:latest
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-backend:${{ github.sha }}
+
+      - name: Build and push YOLO server
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_ai_images == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai/yolo-server
+          file: ./ai/yolo-server/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-yolo-server:latest
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-yolo-server:${{ github.sha }}
+
+      - name: Build and push VLM server
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_ai_images == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./ai/vlm-server
+          file: ./ai/vlm-server/Dockerfile
+          push: true
+          tags: |
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-vlm-server:latest
+            ${{ env.ACR_LOGIN_SERVER }}/burinake-vlm-server:${{ github.sha }}
 
       - name: Get AKS credentials
         run: |
           az aks get-credentials \
-            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
-            --name "${{ secrets.AKS_CLUSTER_NAME }}" \
+            --resource-group "$AZURE_RESOURCE_GROUP" \
+            --name "$AKS_CLUSTER_NAME" \
+            --admin \
             --overwrite-existing
 
       - name: Deploy manifests
-        run: kubectl apply -k infra/k8s
+        run: kubectl apply -k "${{ steps.target.outputs.kustomize_path }}"
 
-      - name: Restart frontend and backend for latest tags
+      - name: Restart application deployments
+        shell: bash
         run: |
-          kubectl rollout restart deployment/frontend -n burinake
-          kubectl rollout restart deployment/backend -n burinake
+          namespace="${{ steps.target.outputs.namespace }}"
+          kubectl rollout restart deployment/frontend -n "$namespace"
+          kubectl rollout restart deployment/backend -n "$namespace"
+
+          if [[ "${{ steps.target.outputs.environment }}" == "prd" ]]; then
+            kubectl rollout restart deployment/yolo-server -n "$namespace"
+            kubectl rollout restart deployment/vlm-server -n "$namespace"
+          fi
 
       - name: Wait for rollout
+        shell: bash
         run: |
-          kubectl rollout status deployment/frontend -n burinake
-          kubectl rollout status deployment/backend -n burinake
-          kubectl rollout status deployment/yolo-server -n burinake
-          kubectl rollout status deployment/vlm-server -n burinake
+          namespace="${{ steps.target.outputs.namespace }}"
+          kubectl rollout status deployment/frontend -n "$namespace" --timeout=10m
+          kubectl rollout status deployment/backend -n "$namespace" --timeout=10m
+
+          if [[ "${{ steps.target.outputs.environment }}" == "prd" ]]; then
+            kubectl rollout status deployment/yolo-server -n "$namespace" --timeout=10m
+            kubectl rollout status deployment/vlm-server -n "$namespace" --timeout=10m
+          fi
+
+      - name: Check public health endpoint
+        run: |
+          curl --fail --show-error --silent --retry 12 --retry-delay 10 \
+            "${{ steps.target.outputs.health_url }}"
 
       - name: Show resources
         run: |
-          kubectl get pods -n burinake
-          kubectl get svc -n burinake
+          kubectl get pods -n "${{ steps.target.outputs.namespace }}"
+          kubectl get svc -n "${{ steps.target.outputs.namespace }}"
