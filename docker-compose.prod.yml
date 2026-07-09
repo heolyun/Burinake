@@ -18,10 +18,14 @@ services:
       AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-Burinake-vlm}
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
       AZURE_OPENAI_MAX_COMPLETION_TOKENS: ${AZURE_OPENAI_MAX_COMPLETION_TOKENS:-4000}
-      AI_YOLO_BASE_URL: ""
+      AI_YOLO_BASE_URL: http://yolo-server:8000
       AI_VLM_BASE_URL: ""
     depends_on:
       - postgres
+      - yolo-server
+
+  yolo-server:
+    image: ${ACR_LOGIN_SERVER}/burinake-ai-server:v2
 
   postgres:
     image: postgres:16-alpine
