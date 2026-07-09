@@ -214,6 +214,12 @@ dt,
   font-size: 34px;
 }
 
+.summary-card .summary-text {
+  font-size: 18px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
 .summary-warning {
   border-color: transparent;
   background: transparent;
@@ -522,6 +528,10 @@ td {
   list-style: none;
 }
 
+.stepper.vertical {
+  grid-template-columns: 1fr;
+}
+
 .step {
   display: flex;
   align-items: center;
@@ -633,6 +643,25 @@ td {
   padding: 10px;
   border-radius: 8px;
   background: #f8fbfd;
+}
+
+.compact-list.single div {
+  grid-template-columns: 1fr;
+}
+
+.error-text {
+  color: #a83327;
+  font-weight: 800;
+}
+
+.message-box p {
+  margin: 8px 0 0;
+}
+
+.message-box pre {
+  overflow-x: auto;
+  margin: 10px 0 0;
+  white-space: pre-wrap;
 }
 
 .timeline {

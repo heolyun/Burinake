@@ -1,6 +1,7 @@
-﻿import { httpClient } from './httpClient';
+import axios from 'axios';
+import { httpClient } from './httpClient';
 
-export type ProcessingStatus = 'COMPLETED' | 'FAILED' | 'PENDING';
+export type ProcessingStatus = 'UPLOADED' | 'YOLO_PROCESSING' | 'YOLO_DONE' | 'VLM_PROCESSING' | 'COMPLETED' | 'FAILED';
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'UNKNOWN';
 
@@ -57,12 +58,12 @@ export type RiskAssessment = {
 export type VlmResult = {
   fire_confirmed: boolean;
   confidence: number | null;
-  detected_bbox: DetectedBbox;
-  timeline_summary: TimelineSummaryItem[];
-  visual_cause: VisualCause;
-  fire_location_detail: FireLocationDetail;
-  risk_assessment: RiskAssessment;
-  recommended_actions: string[];
+  detected_bbox?: DetectedBbox;
+  timeline_summary?: TimelineSummaryItem[];
+  visual_cause?: VisualCause;
+  fire_location_detail?: FireLocationDetail;
+  risk_assessment?: RiskAssessment;
+  recommended_actions?: string[];
   notes: string;
   emergency_report_korean_narrative: string;
 };
@@ -107,7 +108,13 @@ export async function detectFire(request: FireDetectionRequest): Promise<FireDet
     formData.append('capturedAt', request.capturedAt);
   }
 
-  const response = await httpClient.post<FireDetectionResponse>('/api/v1/fire-detections', formData);
-
-  return response.data;
+  try {
+    const response = await httpClient.post<FireDetectionResponse>('/api/v1/fire-detections', formData);
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError<FireDetectionResponse>(error) && error.response?.data) {
+      return error.response.data;
+    }
+    throw error;
+  }
 }

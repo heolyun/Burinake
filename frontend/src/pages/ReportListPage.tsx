@@ -1,24 +1,4 @@
-import { useEffect, useState } from 'react';
-import { getCctvs } from '../api/cctvApi';
-import { getIssues } from '../api/issueApi';
-import { getReports } from '../api/reportApi';
-import { IssueLevelBadge } from '../components/issue/IssueLevelBadge';
-import { ReportStatusBadge } from '../components/report/ReportStatusBadge';
-import { Cctv, EmergencyReport, Issue } from '../mocks/mockData';
-
 export function ReportListPage() {
-  const [reports, setReports] = useState<EmergencyReport[]>([]);
-  const [issues, setIssues] = useState<Issue[]>([]);
-  const [cctvs, setCctvs] = useState<Cctv[]>([]);
-
-  useEffect(() => {
-    void Promise.all([getReports(), getIssues(), getCctvs()]).then(([nextReports, nextIssues, nextCctvs]) => {
-      setReports(nextReports);
-      setIssues(nextIssues);
-      setCctvs(nextCctvs);
-    });
-  }, []);
-
   return (
     <div className="page-stack">
       <section className="page-title">
@@ -27,30 +7,12 @@ export function ReportListPage() {
         </div>
       </section>
 
-      <section className="report-list">
-        {reports.map((report) => {
-          const issue = issues.find((item) => item.issueId === report.issueId);
-          const cctv = issue ? cctvs.find((item) => item.cctvId === issue.cctvId) : null;
-          return (
-            <article className="panel report-card" key={report.reportId}>
-              <div className="panel-title">
-                <h2>Report #{report.reportId}</h2>
-                <ReportStatusBadge status={report.reportStatus} />
-              </div>
-              <div className="report-meta">
-                <span>Issue #{report.issueId}</span>
-                <span>{cctv ? `${cctv.cctvName} ${cctv.cctvNum}` : '-'}</span>
-                <IssueLevelBadge level={issue?.level ?? null} />
-                <span>{new Date(report.createdAt).toLocaleString()}</span>
-                <span>{report.sentAt ? new Date(report.sentAt).toLocaleString() : '전송 전'}</span>
-              </div>
-              <details>
-                <summary>{report.reportMessage}</summary>
-                <p>{report.reportMessage}</p>
-              </details>
-            </article>
-          );
-        })}
+      <section className="panel">
+        <div className="panel-title">
+          <h2>신고 API 준비 중</h2>
+          <span>mock 제거됨</span>
+        </div>
+        <p className="muted">신고 초안, 승인, 발송 API가 추가되면 이 화면에서 실제 신고 상태를 표시합니다.</p>
       </section>
     </div>
   );
