@@ -1,0 +1,147 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: burinake-dev
+  labels:
+    app: backend
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: burinake
+    app.kubernetes.io/environment: dev
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        app.kubernetes.io/name: backend
+        app.kubernetes.io/part-of: burinake
+        app.kubernetes.io/environment: dev
+    spec:
+      containers:
+        - name: backend
+          image: burinakeacr.azurecr.io/burinake-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: 50m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: SPRING_PROFILES_ACTIVE
+            - name: SPRING_DATASOURCE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: SPRING_DATASOURCE_URL
+            - name: SPRING_DATASOURCE_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: SPRING_DATASOURCE_USERNAME
+            - name: SPRING_DATASOURCE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: POSTGRES_PASSWORD
+            - name: AZURE_STORAGE_CONNECTION_STRING
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_STORAGE_CONNECTION_STRING
+            - name: AZURE_BLOB_CONTAINER
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: AZURE_BLOB_CONTAINER
+            - name: AZURE_OPENAI_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_ENDPOINT
+            - name: AZURE_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_API_KEY
+            - name: AZURE_OPENAI_DEPLOYMENT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_DEPLOYMENT_NAME
+            - name: AZURE_OPENAI_API_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_API_VERSION
+            - name: AZURE_OPENAI_MAX_COMPLETION_TOKENS
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: AZURE_OPENAI_MAX_COMPLETION_TOKENS
+            - name: AI_YOLO_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: AI_YOLO_BASE_URL
+            - name: AI_VLM_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: AI_VLM_BASE_URL
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 3
+          volumeMounts:
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
+      volumes:
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: burinake-dev
+  labels:
+    app: backend
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/part-of: burinake
+    app.kubernetes.io/environment: dev
+spec:
+  type: ClusterIP
+  selector:
+    app: backend
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

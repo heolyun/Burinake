@@ -26,11 +26,15 @@ import java.time.Duration;
 import java.util.Base64;
 import java.util.List;
 import java.util.Locale;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 public class AzureOpenAiSequenceVlmClient {
+
+    private static final Logger log = LoggerFactory.getLogger(AzureOpenAiSequenceVlmClient.class);
 
     private static final String SYSTEM_PROMPT = """
             You are 'burinake VLM' for CCTV fire analysis.
@@ -70,6 +74,7 @@ public class AzureOpenAiSequenceVlmClient {
             ObjectMapper objectMapper
     ) {
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         this.objectMapper = objectMapper;
@@ -85,6 +90,7 @@ public class AzureOpenAiSequenceVlmClient {
         try {
             return analyzeInternal(yoloDetectionResult, cctvMetadata, imageSequencePaths);
         } catch (Exception ex) {
+            log.warn("azure-openai-sequence-vlm-fallback reason=analysis-failed", ex);
             return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
         }
     }
@@ -133,7 +139,6 @@ public class AzureOpenAiSequenceVlmClient {
         }
 
         root.put("max_completion_tokens", defaultMaxCompletionTokens());
-        root.put("temperature", 0.2);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(normalizeEndpoint(openAiProperties.endpoint()) + "/openai/deployments/%s/chat/completions?api-version=%s".formatted(
@@ -154,6 +159,7 @@ public class AzureOpenAiSequenceVlmClient {
         JsonNode responseRoot = objectMapper.readTree(response.body());
         String rawContent = responseRoot.path("choices").path(0).path("message").path("content").asText("");
         if (!StringUtils.hasText(rawContent)) {
+            log.warn("azure-openai-sequence-vlm-fallback reason=empty-response");
             return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
         }
 
@@ -161,6 +167,7 @@ public class AzureOpenAiSequenceVlmClient {
         try {
             return objectMapper.readValue(cleanJson, VlmAnalysisResponse.class);
         } catch (Exception ex) {
+            log.warn("azure-openai-sequence-vlm-fallback reason=parse-failed rawContent={}", rawContent, ex);
             return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
         }
     }

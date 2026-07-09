@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: burinake-dev
+resources:
+  - namespace.yaml
+  - resource-policy.yaml
+  - configmap.yaml
+  - keyvault-secretproviderclass.yaml
+  - postgres-schema-job.yaml
+  - backend.yaml
+  - frontend.yaml
+  - ingress.yaml
+configMapGenerator:
+  - name: burinake-db-schema
+    files:
+      - 001_init.sql=db/001_init.sql
+generatorOptions:
+  disableNameSuffixHash: true

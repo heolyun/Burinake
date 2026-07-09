@@ -1,0 +1,106 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vlm-server
+  namespace: burinake
+  labels:
+    app: vlm-server
+    app.kubernetes.io/name: vlm-server
+    app.kubernetes.io/part-of: burinake
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vlm-server
+  template:
+    metadata:
+      labels:
+        app: vlm-server
+        app.kubernetes.io/name: vlm-server
+        app.kubernetes.io/part-of: burinake
+    spec:
+      containers:
+        - name: vlm-server
+          image: burinakeacr.azurecr.io/burinake-vlm-server:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8002
+          resources:
+            requests:
+              cpu: 25m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          env:
+            - name: APP_ENV
+              value: "prod"
+            - name: MODEL_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: VLM_MODEL_PROVIDER
+            - name: AZURE_OPENAI_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_ENDPOINT
+            - name: AZURE_OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_API_KEY
+            - name: AZURE_OPENAI_DEPLOYMENT_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_DEPLOYMENT_NAME
+            - name: AZURE_OPENAI_API_VERSION
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: AZURE_OPENAI_API_VERSION
+          volumeMounts:
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            failureThreshold: 3
+      volumes:
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vlm-server
+  namespace: burinake
+  labels:
+    app: vlm-server
+    app.kubernetes.io/name: vlm-server
+    app.kubernetes.io/part-of: burinake
+spec:
+  type: ClusterIP
+  selector:
+    app: vlm-server
+  ports:
+    - name: http
+      port: 8002
+      targetPort: http

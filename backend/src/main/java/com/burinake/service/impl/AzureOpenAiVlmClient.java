@@ -25,11 +25,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 class AzureOpenAiVlmClient implements VlmClient {
+
+    private static final Logger log = LoggerFactory.getLogger(AzureOpenAiVlmClient.class);
 
     private static final String DEFAULT_SYSTEM_PROMPT = """
             You are 'burinake VLM', a highly advanced AI core designed for a smart CCTV-based fire management and emergency dispatch system.
@@ -65,6 +69,7 @@ class AzureOpenAiVlmClient implements VlmClient {
             ObjectMapper objectMapper
     ) {
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         this.objectMapper = objectMapper;
@@ -141,10 +146,12 @@ class AzureOpenAiVlmClient implements VlmClient {
                                 originalFilename
                         );
                     } catch (Exception localFallbackEx) {
+                        log.warn("azure-openai-vlm-fallback reason=local-vlm-failed-after-azure-failed", localFallbackEx);
                         return fallback(yoloResult);
                     }
                 }
 
+                log.warn("azure-openai-vlm-fallback reason=azure-failed", ex);
                 return fallback(yoloResult);
             }
         }
@@ -160,6 +167,7 @@ class AzureOpenAiVlmClient implements VlmClient {
                         originalFilename
                 );
             } catch (Exception ex) {
+                log.warn("azure-openai-vlm-fallback reason=local-vlm-failed", ex);
                 return fallback(yoloResult);
             }
         }
@@ -209,7 +217,6 @@ class AzureOpenAiVlmClient implements VlmClient {
         }
 
         root.put("max_completion_tokens", maxCompletionTokens);
-        root.put("temperature", 0.2);
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("%s/openai/deployments/%s/chat/completions?api-version=%s".formatted(
@@ -231,6 +238,7 @@ class AzureOpenAiVlmClient implements VlmClient {
         JsonNode responseRoot = objectMapper.readTree(response.body());
         String rawContent = responseRoot.path("choices").path(0).path("message").path("content").asText("");
         if (!StringUtils.hasText(rawContent)) {
+            log.warn("azure-openai-vlm-fallback reason=empty-response imageId={}", imageId);
             return fallback(yoloResult);
         }
 

@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: postgres-schema-init
+  namespace: burinake-dev
+  labels:
+    app.kubernetes.io/name: postgres-schema-init
+    app.kubernetes.io/part-of: burinake
+    app.kubernetes.io/environment: dev
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: postgres-schema-init
+        app.kubernetes.io/part-of: burinake
+        app.kubernetes.io/environment: dev
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: psql
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+          resources:
+            requests:
+              cpu: 5m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: POSTGRES_USER
+            - name: POSTGRES_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: POSTGRES_HOST
+            - name: POSTGRES_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: burinake-config
+                  key: POSTGRES_PORT
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: burinake-runtime-secret
+                  key: POSTGRES_PASSWORD
+            - name: PGSSLMODE
+              value: require
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB"; do
+                echo "waiting for postgres"
+                sleep 2
+              done
+              psql -h "$POSTGRES_HOST" -p "$POSTGRES_PORT" -U "$POSTGRES_USER" -d "$POSTGRES_DB" -v ON_ERROR_STOP=1 -f /schema/001_init.sql
+          volumeMounts:
+            - name: schema
+              mountPath: /schema
+              readOnly: true
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
+      volumes:
+        - name: schema
+          configMap:
+            name: burinake-db-schema
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets

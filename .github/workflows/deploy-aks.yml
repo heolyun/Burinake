@@ -1,0 +1,86 @@
+name: Deploy to AKS
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_images:
+        description: Build and push frontend/backend images before deploying
+        required: true
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+concurrency:
+  group: deploy-aks
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: aks
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+      - name: Log in to ACR
+        if: ${{ inputs.build_images == 'true' }}
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.ACR_LOGIN_SERVER }}
+          username: ${{ secrets.ACR_USERNAME }}
+          password: ${{ secrets.ACR_PASSWORD }}
+
+      - name: Build and push frontend
+        if: ${{ inputs.build_images == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-frontend:latest
+
+      - name: Build and push backend
+        if: ${{ inputs.build_images == 'true' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: prod
+          push: true
+          tags: ${{ secrets.ACR_LOGIN_SERVER }}/burinake-backend:latest
+
+      - name: Get AKS credentials
+        run: |
+          az aks get-credentials \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --name "${{ secrets.AKS_CLUSTER_NAME }}" \
+            --overwrite-existing
+
+      - name: Deploy manifests
+        run: kubectl apply -k infra/k8s
+
+      - name: Restart frontend and backend for latest tags
+        run: |
+          kubectl rollout restart deployment/frontend -n burinake
+          kubectl rollout restart deployment/backend -n burinake
+
+      - name: Wait for rollout
+        run: |
+          kubectl rollout status deployment/frontend -n burinake
+          kubectl rollout status deployment/backend -n burinake
+          kubectl rollout status deployment/yolo-server -n burinake
+          kubectl rollout status deployment/vlm-server -n burinake
+
+      - name: Show resources
+        run: |
+          kubectl get pods -n burinake
+          kubectl get svc -n burinake
