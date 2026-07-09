@@ -34,7 +34,7 @@ spec:
             - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: POSTGRES_PASSWORD
           command:
             - sh
@@ -49,7 +49,16 @@ spec:
             - name: schema
               mountPath: /schema
               readOnly: true
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
       volumes:
         - name: schema
           configMap:
             name: burinake-db-schema
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets

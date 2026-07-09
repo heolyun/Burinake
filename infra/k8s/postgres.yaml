@@ -59,13 +59,16 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: POSTGRES_PASSWORD
             - name: PGDATA
               value: /var/lib/postgresql/data/pgdata
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
           readinessProbe:
             exec:
               command:
@@ -82,6 +85,13 @@ spec:
                 - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
             initialDelaySeconds: 30
             periodSeconds: 20
+      volumes:
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets
   volumeClaimTemplates:
     - metadata:
         name: postgres-data

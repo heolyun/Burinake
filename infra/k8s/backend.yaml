@@ -45,12 +45,12 @@ spec:
             - name: SPRING_DATASOURCE_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: POSTGRES_PASSWORD
             - name: AZURE_STORAGE_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_STORAGE_CONNECTION_STRING
             - name: AZURE_BLOB_CONTAINER
               valueFrom:
@@ -60,22 +60,22 @@ spec:
             - name: AZURE_OPENAI_ENDPOINT
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_ENDPOINT
             - name: AZURE_OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_API_KEY
             - name: AZURE_OPENAI_DEPLOYMENT_NAME
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_DEPLOYMENT_NAME
             - name: AZURE_OPENAI_API_VERSION
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_API_VERSION
             - name: AZURE_OPENAI_MAX_COMPLETION_TOKENS
               valueFrom:
@@ -106,6 +106,17 @@ spec:
             initialDelaySeconds: 60
             periodSeconds: 20
             failureThreshold: 3
+          volumeMounts:
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
+      volumes:
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets
 ---
 apiVersion: v1
 kind: Service

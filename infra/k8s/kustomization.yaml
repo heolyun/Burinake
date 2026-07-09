@@ -4,6 +4,7 @@ namespace: burinake
 resources:
   - namespace.yaml
   - configmap.yaml
+  - keyvault-secretproviderclass.yaml
   - postgres.yaml
   - postgres-schema-job.yaml
   - backend.yaml

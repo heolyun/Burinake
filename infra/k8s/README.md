@@ -12,24 +12,20 @@ The existing Azure resources are reused:
 
 ## Apply Order
 
-Create the AKS cluster and connect kubectl first. Then create the namespace and real secrets:
+Create the AKS cluster and connect kubectl first. Runtime secrets are sourced from Azure Key Vault through the Secrets Store CSI Driver:
 
 ```bash
-kubectl apply -f infra/k8s/namespace.yaml
+az aks enable-addons \
+  --resource-group Burinake \
+  --name burinake-aks \
+  --addons azure-keyvault-secrets-provider
 
-kubectl create secret generic burinake-secret \
-  --from-literal=POSTGRES_PASSWORD="..." \
-  --from-literal=AZURE_STORAGE_CONNECTION_STRING="..." \
-  --from-literal=AZURE_OPENAI_ENDPOINT="..." \
-  --from-literal=AZURE_OPENAI_API_KEY="..." \
-  --from-literal=AZURE_OPENAI_DEPLOYMENT_NAME="Burinake-vlm" \
-  --from-literal=AZURE_OPENAI_API_VERSION="2024-02-15-preview" \
-  -n burinake
+kubectl apply -k infra/k8s
 ```
 
-Do not apply `secrets.example.yaml` with placeholder values to a real cluster.
+`keyvault-secretproviderclass.yaml` currently points at `burinake-kv-368x19` and syncs Key Vault secrets into `burinake-runtime-secret`. Do not apply `secrets.example.yaml` with placeholder values to a real cluster.
 
-Deploy:
+Check:
 
 ```bash
 kubectl apply -k infra/k8s
@@ -39,9 +35,9 @@ kubectl get svc -n burinake
 
 ## Notes
 
-- `frontend` is exposed as `LoadBalancer` for the first AKS test.
+- `frontend` is exposed through `ingress-nginx` with a temporary `nip.io` HTTPS host.
 - `backend`, `yolo-server`, `vlm-server`, and `postgres` use internal ClusterIP services.
 - `postgres.yaml` is a temporary staging StatefulSet with PVC. For stronger production architecture, replace it with Azure Database for PostgreSQL Flexible Server.
-- `yolo-server` mounts `/app/models` from `emptyDir` as a placeholder. Real YOLO model provisioning is still required, preferably Azure Files PersistentVolume or Blob download through an initContainer.
+- `yolo-server` downloads the YOLO model from Azure Blob Storage in an initContainer.
 - VLM uses Azure OpenAI / AI Foundry as an external API. The VLM model itself is not deployed into AKS.
-- `ingress.yaml` is prepared but not included in `kustomization.yaml` until an ingress controller is installed.
+- `ingress.yaml` requires `ingress-nginx` and `cert-manager` to be installed before applying the kustomization.

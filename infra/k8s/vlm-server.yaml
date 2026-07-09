@@ -37,23 +37,27 @@ spec:
             - name: AZURE_OPENAI_ENDPOINT
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_ENDPOINT
             - name: AZURE_OPENAI_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_API_KEY
             - name: AZURE_OPENAI_DEPLOYMENT_NAME
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_DEPLOYMENT_NAME
             - name: AZURE_OPENAI_API_VERSION
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_OPENAI_API_VERSION
+          volumeMounts:
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /health
@@ -68,6 +72,13 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
             failureThreshold: 3
+      volumes:
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets
 ---
 apiVersion: v1
 kind: Service

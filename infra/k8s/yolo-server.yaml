@@ -27,7 +27,7 @@ spec:
             - name: AZURE_STORAGE_CONNECTION_STRING
               valueFrom:
                 secretKeyRef:
-                  name: burinake-secret
+                  name: burinake-runtime-secret
                   key: AZURE_STORAGE_CONNECTION_STRING
             - name: AZURE_BLOB_CONTAINER
               valueFrom:
@@ -59,6 +59,9 @@ spec:
           volumeMounts:
             - name: yolo-models
               mountPath: /app/models
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
       containers:
         - name: yolo-server
           image: burinakeacr.azurecr.io/burinake-yolo-server:latest
@@ -77,6 +80,9 @@ spec:
           volumeMounts:
             - name: yolo-models
               mountPath: /app/models
+            - name: keyvault-secrets
+              mountPath: /mnt/secrets-store
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /health
@@ -94,6 +100,12 @@ spec:
       volumes:
         - name: yolo-models
           emptyDir: {}
+        - name: keyvault-secrets
+          csi:
+            driver: secrets-store.csi.k8s.io
+            readOnly: true
+            volumeAttributes:
+              secretProviderClass: burinake-keyvault-secrets
 ---
 apiVersion: v1
 kind: Service
