@@ -10,8 +10,8 @@ resources:
   - frontend.yaml
   - yolo-server.yaml
   - vlm-server.yaml
-# Optional. Apply only after installing an ingress controller.
-#  - ingress.yaml
+  - cert-manager-clusterissuer.yaml
+  - ingress.yaml
 configMapGenerator:
   - name: burinake-db-schema
     files:

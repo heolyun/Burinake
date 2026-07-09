@@ -49,7 +49,7 @@ metadata:
     app.kubernetes.io/name: frontend
     app.kubernetes.io/part-of: burinake
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: frontend
   ports:

@@ -7,10 +7,17 @@ metadata:
     app.kubernetes.io/name: burinake
     app.kubernetes.io/part-of: burinake
   annotations:
-    kubernetes.io/ingress.class: nginx
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
 spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - burinake.20.249.106.231.nip.io
+      secretName: burinake-tls
   rules:
-    - http:
+    - host: burinake.20.249.106.231.nip.io
+      http:
         paths:
           - path: /
             pathType: Prefix
