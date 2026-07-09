@@ -5,6 +5,9 @@ on:
     branches:
       - develop
       - main
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
   workflow_dispatch:
     inputs:
       target_environment:
