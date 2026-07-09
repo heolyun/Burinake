@@ -1,0 +1,43 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: burinake-dev
+  namespace: burinake-dev
+  labels:
+    app.kubernetes.io/name: burinake
+    app.kubernetes.io/part-of: burinake
+    app.kubernetes.io/environment: dev
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - dev-burinake.20.249.106.231.nip.io
+      secretName: burinake-dev-tls
+  rules:
+    - host: dev-burinake.20.249.106.231.nip.io
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+          - path: /actuator
+            pathType: Prefix
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080

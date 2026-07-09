@@ -37,7 +37,7 @@ Prepare the lightweight DEV namespace guardrails:
 
 ```bash
 kubectl apply -k infra/k8s/environments/dev
-kubectl get resourcequota,limitrange -n burinake-dev
+kubectl get pods,ingress,resourcequota,limitrange -n burinake-dev
 ```
 
 ## Notes

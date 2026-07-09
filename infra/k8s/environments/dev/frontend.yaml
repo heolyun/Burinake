@@ -2,11 +2,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: burinake
+  namespace: burinake-dev
   labels:
     app: frontend
     app.kubernetes.io/name: frontend
     app.kubernetes.io/part-of: burinake
+    app.kubernetes.io/environment: dev
 spec:
   replicas: 1
   selector:
@@ -18,6 +19,7 @@ spec:
         app: frontend
         app.kubernetes.io/name: frontend
         app.kubernetes.io/part-of: burinake
+        app.kubernetes.io/environment: dev
     spec:
       containers:
         - name: frontend
@@ -50,11 +52,12 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend
-  namespace: burinake
+  namespace: burinake-dev
   labels:
     app: frontend
     app.kubernetes.io/name: frontend
     app.kubernetes.io/part-of: burinake
+    app.kubernetes.io/environment: dev
 spec:
   type: ClusterIP
   selector:

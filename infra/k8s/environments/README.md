@@ -12,7 +12,10 @@ DEV is prepared as a separate namespace with guardrails:
 
 - Namespace: `burinake-dev`
 - Entry point: `infra/k8s/environments/dev`
-- Workloads are not deployed by default to avoid doubling node cost and CPU pressure on the current single-node AKS cluster.
+- Public host: `https://dev-burinake.20.249.106.231.nip.io`
+- Workloads: lightweight `frontend` and `backend`
+- Database: `burinake_dev` on the shared Azure PostgreSQL Flexible Server
+- YOLO/VLM: shared from PRD through cluster DNS (`*.burinake.svc.cluster.local`)
 - `ResourceQuota` blocks LoadBalancer/NodePort services in DEV so accidental public IP creation does not happen.
 
-Recommended next step for a full DEV stack is to add a dedicated dev overlay with separate database/schema, Key Vault secret names, and an internal-only ingress or port-forward workflow.
+This keeps DEV useful for frontend/backend changes without doubling the AI server footprint on the current single-node AKS cluster.
