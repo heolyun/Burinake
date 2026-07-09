@@ -1,12 +1,20 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
+namespace: burinake
 resources:
   - namespace.yaml
   - configmap.yaml
   - postgres.yaml
+  - postgres-schema-job.yaml
   - backend.yaml
   - frontend.yaml
   - yolo-server.yaml
   - vlm-server.yaml
 # Optional. Apply only after installing an ingress controller.
 #  - ingress.yaml
+configMapGenerator:
+  - name: burinake-db-schema
+    files:
+      - 001_init.sql=db/001_init.sql
+generatorOptions:
+  disableNameSuffixHash: true

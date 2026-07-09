@@ -32,6 +32,7 @@ class HttpYoloClient implements YoloClient {
 
     public HttpYoloClient(AiProperties aiProperties, ObjectMapper objectMapper) {
         this.httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         this.objectMapper = objectMapper;

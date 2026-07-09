@@ -32,6 +32,21 @@ class FireAnalyzeResponse(BaseModel):
     boxes: list[BoundingBox] = Field(default_factory=list)
 
 
+class YoloDetectResult(BaseModel):
+    detected: bool
+    boxes: list[BoundingBox] = Field(default_factory=list)
+
+
+class YoloDetectMetadata(BaseModel):
+    imageId: str
+    capturedAt: str | None = None
+
+
+class YoloDetectResponse(BaseModel):
+    result: YoloDetectResult
+    metadata: YoloDetectMetadata
+
+
 @lru_cache
 def load_model():
     model_path = os.getenv("MODEL_PATH")
@@ -136,12 +151,7 @@ def infer_with_heuristic(image_path: str) -> FireAnalyzeResponse:
     )
 
 
-@router.post("/api/v1/fire/analyze", response_model=FireAnalyzeResponse)
-async def analyze_fire(
-    imageId: str = Form(...),
-    blobPath: str = Form(...),
-    image: UploadFile = File(...),
-) -> FireAnalyzeResponse:
+async def analyze_upload(image: UploadFile) -> FireAnalyzeResponse:
     suffix = Path(image.filename or "image.jpg").suffix or ".jpg"
     temp_path = None
 
@@ -158,3 +168,31 @@ async def analyze_fire(
     finally:
         if temp_path and Path(temp_path).exists():
             Path(temp_path).unlink(missing_ok=True)
+
+
+@router.post("/api/v1/fire/analyze", response_model=FireAnalyzeResponse)
+async def analyze_fire(
+    imageId: str = Form(...),
+    blobPath: str = Form(...),
+    image: UploadFile = File(...),
+) -> FireAnalyzeResponse:
+    return await analyze_upload(image)
+
+
+@router.post("/api/detect", response_model=YoloDetectResponse)
+async def detect_fire_compat(
+    imageId: str = Form(default=""),
+    capturedAt: str | None = Form(default=None),
+    image: UploadFile = File(...),
+) -> YoloDetectResponse:
+    result = await analyze_upload(image)
+    return YoloDetectResponse(
+        result=YoloDetectResult(
+            detected=result.detected,
+            boxes=result.boxes,
+        ),
+        metadata=YoloDetectMetadata(
+            imageId=imageId,
+            capturedAt=capturedAt,
+        ),
+    )
