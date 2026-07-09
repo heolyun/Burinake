@@ -33,6 +33,13 @@ kubectl get pods -n burinake
 kubectl get svc -n burinake
 ```
 
+Prepare the lightweight DEV namespace guardrails:
+
+```bash
+kubectl apply -k infra/k8s/environments/dev
+kubectl get resourcequota,limitrange -n burinake-dev
+```
+
 ## Notes
 
 - `frontend` is exposed through `ingress-nginx` with a temporary `nip.io` HTTPS host.
