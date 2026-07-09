@@ -403,6 +403,27 @@ label {
   grid-column: 1 / -1;
 }
 
+.file-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.file-chip {
+  min-height: 32px;
+  padding: 6px 10px;
+  border-color: #c7d4df;
+  background: #fbfdff;
+  color: #405061;
+  font-size: 13px;
+}
+
+.file-chip.active {
+  border-color: #e35d3f;
+  background: #fff0ec;
+  color: #9d2e20;
+}
+
 button,
 .ghost-button,
 .primary-button,

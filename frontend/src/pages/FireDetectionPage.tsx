@@ -2,20 +2,26 @@ import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState 
 import { detectFire, type FireDetectionResponse } from '../lib/api/fireDetection';
 
 type FormState = {
-  image: File | null;
   cctvName: string;
   cctvNum: string;
   source: string;
   capturedAt: string;
 };
 
+type HistoryItem = {
+  fileName: string;
+  frameIndex: number;
+  response: FireDetectionResponse;
+};
+
 const initialFormState: FormState = {
-  image: null,
   cctvName: '정문 주차장 CCTV',
   cctvNum: 'CAM-01',
   source: 'frontend-demo',
   capturedAt: '',
 };
+
+const FRAME_INTERVAL_SECONDS = 3;
 
 function toLocalDateTimeValue(date: Date) {
   const offset = date.getTimezoneOffset();
@@ -61,22 +67,36 @@ function primaryMessage(result: FireDetectionResponse | null) {
   );
 }
 
+function addSeconds(value: string, seconds: number) {
+  const base = value ? new Date(value) : new Date();
+  return new Date(base.getTime() + seconds * 1000);
+}
+
 export function FireDetectionPage() {
   const [formState, setFormState] = useState<FormState>({
     ...initialFormState,
     capturedAt: toLocalDateTimeValue(new Date()),
   });
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [currentFileIndex, setCurrentFileIndex] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<FireDetectionResponse | null>(null);
-  const [history, setHistory] = useState<FireDetectionResponse[]>([]);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isRepeating, setIsRepeating] = useState(false);
+  const [isSequenceRunning, setIsSequenceRunning] = useState(false);
+
   const intervalRef = useRef<number | null>(null);
   const formStateRef = useRef(formState);
+  const selectedFilesRef = useRef(selectedFiles);
+  const sequenceIndexRef = useRef(0);
+  const sequenceBaseCapturedAtRef = useRef(formState.capturedAt);
+  const isSendingRef = useRef(false);
 
-  const canSubmit = Boolean(formState.image) && !isSubmitting;
+  const currentFile = selectedFiles[currentFileIndex] ?? null;
+  const canSubmit = Boolean(currentFile) && !isSubmitting;
   const detectedBoxes = result?.yoloResult.boxes ?? [];
+
   const pipelineState = useMemo(() => {
     if (!result) return ['이미지 선택', '요청 대기'];
     if (result.status === 'UPLOADED') return ['Storage 저장', '기존 이슈 연결', 'YOLO 쿨다운으로 분석 스킵'];
@@ -89,51 +109,62 @@ export function FireDetectionPage() {
   }, [formState]);
 
   useEffect(() => {
+    selectedFilesRef.current = selectedFiles;
+  }, [selectedFiles]);
+
+  useEffect(() => {
+    if (!currentFile) {
+      setPreviewUrl(null);
+      return;
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(currentFile);
+    setPreviewUrl(nextPreviewUrl);
+    return () => URL.revokeObjectURL(nextPreviewUrl);
+  }, [currentFile]);
+
+  useEffect(() => {
     return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
       if (intervalRef.current) window.clearInterval(intervalRef.current);
     };
-  }, [previewUrl]);
+  }, []);
 
-  const updateField = (field: keyof Omit<FormState, 'image'>) => (event: ChangeEvent<HTMLInputElement>) => {
+  const updateField = (field: keyof FormState) => (event: ChangeEvent<HTMLInputElement>) => {
     setFormState((current) => ({ ...current, [field]: event.target.value }));
   };
 
   const handleImageChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    setFormState((current) => ({ ...current, image: file }));
+    const files = Array.from(event.target.files ?? []);
+    setSelectedFiles(files);
+    setCurrentFileIndex(0);
     setResult(null);
     setError(null);
-
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-    setPreviewUrl(file ? URL.createObjectURL(file) : null);
+    setHistory([]);
   };
 
-  const submitDetection = async (capturedAtValue?: string) => {
-    const currentForm = formStateRef.current;
-    if (!currentForm.image) {
-      setError('이미지를 먼저 선택해 주세요.');
-      return;
-    }
+  const stopSequence = () => {
+    if (intervalRef.current) window.clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    setIsSequenceRunning(false);
+    isSendingRef.current = false;
+  };
 
+  const submitDetection = async (file: File, frameIndex: number, capturedAtValue: string) => {
+    const currentForm = formStateRef.current;
     setIsSubmitting(true);
     setError(null);
 
     try {
       const response = await detectFire({
-        image: currentForm.image,
+        image: file,
         cctvName: currentForm.cctvName || undefined,
         cctvNum: currentForm.cctvNum || undefined,
         source: currentForm.source || undefined,
-        capturedAt: capturedAtValue
-          ? new Date(capturedAtValue).toISOString()
-          : currentForm.capturedAt
-            ? new Date(currentForm.capturedAt).toISOString()
-            : undefined,
+        capturedAt: new Date(capturedAtValue).toISOString(),
       });
+
       setResult(response);
-      setHistory((current) => [response, ...current].slice(0, 8));
-      setFormState((current) => ({ ...current, capturedAt: toLocalDateTimeValue(new Date()) }));
+      setHistory((current) => [{ fileName: file.name, frameIndex, response }, ...current].slice(0, 12));
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '화재 감지 요청에 실패했습니다.');
     } finally {
@@ -141,26 +172,60 @@ export function FireDetectionPage() {
     }
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    await submitDetection();
-  };
-
-  const toggleRepeat = () => {
-    if (isRepeating) {
-      if (intervalRef.current) window.clearInterval(intervalRef.current);
-      intervalRef.current = null;
-      setIsRepeating(false);
+  const sendSequenceFrame = async (index: number) => {
+    const files = selectedFilesRef.current;
+    const file = files[index];
+    if (!file) {
+      stopSequence();
       return;
     }
 
-    void submitDetection();
+    if (isSendingRef.current) return;
+
+    isSendingRef.current = true;
+    setCurrentFileIndex(index);
+    const capturedAt = toLocalDateTimeValue(addSeconds(sequenceBaseCapturedAtRef.current, index * FRAME_INTERVAL_SECONDS));
+    setFormState((current) => ({ ...current, capturedAt }));
+    await submitDetection(file, index + 1, capturedAt);
+    isSendingRef.current = false;
+
+    if (index >= files.length - 1) {
+      stopSequence();
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!currentFile) {
+      setError('이미지를 먼저 선택해 주세요.');
+      return;
+    }
+    await submitDetection(currentFile, currentFileIndex + 1, formState.capturedAt);
+  };
+
+  const toggleSequence = () => {
+    if (isSequenceRunning) {
+      stopSequence();
+      return;
+    }
+
+    if (selectedFiles.length === 0) {
+      setError('여러 snapshot 이미지를 먼저 선택해 주세요.');
+      return;
+    }
+
+    setError(null);
+    setHistory([]);
+    setResult(null);
+    sequenceIndexRef.current = 0;
+    sequenceBaseCapturedAtRef.current = formState.capturedAt || toLocalDateTimeValue(new Date());
+    setIsSequenceRunning(true);
+
+    void sendSequenceFrame(0);
     intervalRef.current = window.setInterval(() => {
-      const nextCapturedAt = toLocalDateTimeValue(new Date());
-      setFormState((current) => ({ ...current, capturedAt: nextCapturedAt }));
-      void submitDetection(nextCapturedAt);
-    }, 3000);
-    setIsRepeating(true);
+      sequenceIndexRef.current += 1;
+      void sendSequenceFrame(sequenceIndexRef.current);
+    }, FRAME_INTERVAL_SECONDS * 1000);
   };
 
   return (
@@ -170,8 +235,8 @@ export function FireDetectionPage() {
           <h1>화재 감지 테스트</h1>
         </div>
         <div className="title-actions">
-          <button className="secondary-button" type="button" onClick={toggleRepeat} disabled={!formState.image}>
-            {isRepeating ? '3초 반복 중지' : '3초 반복 전송'}
+          <button className="secondary-button" type="button" onClick={toggleSequence} disabled={selectedFiles.length === 0}>
+            {isSequenceRunning ? '순차 전송 중지' : '3초 간격 순차 전송'}
           </button>
         </div>
       </section>
@@ -191,17 +256,32 @@ export function FireDetectionPage() {
             <input value={formState.source} onChange={updateField('source')} required />
           </label>
           <label>
-            촬영 시각
+            시작 촬영 시각
             <input type="datetime-local" value={formState.capturedAt} onChange={updateField('capturedAt')} required />
           </label>
           <label className="full-span">
-            Snapshot 이미지
-            <input accept="image/*" type="file" onChange={handleImageChange} required />
+            Snapshot 이미지들
+            <input accept="image/*" type="file" multiple onChange={handleImageChange} required />
           </label>
+
+          {selectedFiles.length > 0 ? (
+            <div className="file-list full-span">
+              {selectedFiles.map((file, index) => (
+                <button
+                  className={index === currentFileIndex ? 'file-chip active' : 'file-chip'}
+                  type="button"
+                  key={`${file.name}-${file.lastModified}-${index}`}
+                  onClick={() => setCurrentFileIndex(index)}
+                >
+                  {index + 1}. {file.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
 
           <div className="form-footer">
             <button className="primary-button" type="submit" disabled={!canSubmit}>
-              {isSubmitting ? '요청 중' : '탐지 요청'}
+              {isSubmitting ? '요청 중' : '선택 이미지 탐지'}
             </button>
             {error ? <span className="error-text">{error}</span> : null}
           </div>
@@ -210,7 +290,9 @@ export function FireDetectionPage() {
         <aside className="panel upload-preview">
           <div className="panel-title">
             <h2>Snapshot</h2>
-            <span>{formState.image ? formState.image.name : '이미지 미선택'}</span>
+            <span>
+              {currentFile ? `${currentFileIndex + 1}/${selectedFiles.length} ${currentFile.name}` : '이미지 미선택'}
+            </span>
           </div>
           {previewUrl ? <img src={previewUrl} alt="선택한 snapshot 미리보기" /> : <div className="empty-panel">이미지를 선택해 주세요.</div>}
         </aside>
@@ -298,6 +380,8 @@ export function FireDetectionPage() {
         <table>
           <thead>
             <tr>
+              <th>frame</th>
+              <th>파일</th>
               <th>imageId</th>
               <th>상태</th>
               <th>탐지</th>
@@ -307,12 +391,14 @@ export function FireDetectionPage() {
           </thead>
           <tbody>
             {history.map((item) => (
-              <tr key={`${item.imageId}-${item.processedAt}`}>
-                <td>#{item.imageId}</td>
-                <td>{statusLabel(item.status)}</td>
-                <td>{item.fireDetected ? '탐지' : '미탐지'}</td>
-                <td>{riskLabel(item.riskLevel)}</td>
-                <td>{formatDateTime(item.processedAt)}</td>
+              <tr key={`${item.response.imageId}-${item.response.processedAt}`}>
+                <td>{item.frameIndex}</td>
+                <td>{item.fileName}</td>
+                <td>#{item.response.imageId}</td>
+                <td>{statusLabel(item.response.status)}</td>
+                <td>{item.response.fireDetected ? '탐지' : '미탐지'}</td>
+                <td>{riskLabel(item.response.riskLevel)}</td>
+                <td>{formatDateTime(item.response.processedAt)}</td>
               </tr>
             ))}
           </tbody>
