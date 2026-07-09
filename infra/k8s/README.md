@@ -36,8 +36,9 @@ kubectl get svc -n burinake
 ## Notes
 
 - `frontend` is exposed through `ingress-nginx` with a temporary `nip.io` HTTPS host.
-- `backend`, `yolo-server`, `vlm-server`, and `postgres` use internal ClusterIP services.
-- `postgres.yaml` is a temporary staging StatefulSet with PVC. For stronger production architecture, replace it with Azure Database for PostgreSQL Flexible Server.
+- `backend`, `yolo-server`, and `vlm-server` use internal ClusterIP services.
+- PostgreSQL is Azure Database for PostgreSQL Flexible Server: `burinake-pg-368x19.postgres.database.azure.com`.
+- `postgres.yaml` is kept in the repository only as the previous in-cluster fallback manifest and is not included in `kustomization.yaml`.
 - `yolo-server` downloads the YOLO model from Azure Blob Storage in an initContainer.
 - VLM uses Azure OpenAI / AI Foundry as an external API. The VLM model itself is not deployed into AKS.
 - `ingress.yaml` requires `ingress-nginx` and `cert-manager` to be installed before applying the kustomization.
