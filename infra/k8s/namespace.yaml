@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: burinake
+  labels:
+    app.kubernetes.io/name: burinake
+    app.kubernetes.io/part-of: burinake
