@@ -9,6 +9,8 @@ metadata:
     app.kubernetes.io/part-of: burinake
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: yolo-server
@@ -69,6 +71,13 @@ spec:
           ports:
             - name: http
               containerPort: 8001
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1500m
+              memory: 1536Mi
           env:
             - name: APP_ENV
               value: "prod"

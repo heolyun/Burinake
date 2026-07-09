@@ -26,6 +26,13 @@ spec:
           ports:
             - name: http
               containerPort: 8002
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
           env:
             - name: APP_ENV
               value: "prod"

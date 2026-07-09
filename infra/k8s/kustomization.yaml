@@ -10,6 +10,7 @@ resources:
   - frontend.yaml
   - yolo-server.yaml
   - vlm-server.yaml
+  - hpa.yaml
   - cert-manager-clusterissuer.yaml
   - ingress.yaml
 configMapGenerator:
