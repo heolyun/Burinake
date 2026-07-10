@@ -129,7 +129,7 @@ sequenceDiagram
 | Secret management | Azure Key Vault + Secrets Store CSI Driver |
 | Database | Azure Database for PostgreSQL Flexible Server |
 | Image storage | Azure Blob Storage |
-| AI model runtime | YOLO/VLM server pods in AKS, Azure OpenAI for VLM inference |
+| AI model runtime | YOLO server uses `burinake-ai-server:v2`, VLM server runs in AKS and calls Azure OpenAI |
 | Monitoring | Azure Monitor Container Insights |
 | Autoscaling | HPA configured for PRD workloads |
 | CI/CD | GitHub Actions with Azure OIDC |
@@ -141,5 +141,6 @@ sequenceDiagram
 - DEV and PRD are separated by Kubernetes namespaces.
 - DEV is lightweight and reuses the PRD YOLO/VLM services to reduce cost.
 - PRD contains the full application stack: frontend, backend, YOLO server, and VLM server.
+- The YOLO runtime currently uses the legacy `burinake-ai-server:v2` image because it preserves the tested model behavior.
 - GPU node pool is intentionally deferred because the current subscription quota does not allow it.
 - The current domain uses `nip.io` as a temporary HTTPS domain until a real domain is connected.

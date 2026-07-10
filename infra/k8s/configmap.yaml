@@ -20,6 +20,4 @@ data:
   AZURE_OPENAI_DEPLOYMENT_NAME: "Burinake-vlm"
   AZURE_OPENAI_API_VERSION: "2024-02-15-preview"
   AZURE_OPENAI_MAX_COMPLETION_TOKENS: "4000"
-  YOLO_MODEL_PATH: "/app/models/yolo-fire.pt"
-  YOLO_MODEL_BLOB_NAME: "models/yolo/yolo-fire.pt"
   VLM_MODEL_PROVIDER: "azure-openai"

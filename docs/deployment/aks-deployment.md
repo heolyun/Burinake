@@ -134,15 +134,17 @@ The current Kubernetes manifests do not automate schema migrations. Apply databa
 
 ## AI Model Storage
 
-YOLO model files are still excluded from Git and Docker images.
+The current YOLO runtime uses the legacy ACR image `burinake-ai-server:v2`.
+That image contains the tested model files under `/app/weights` and exposes `/api/detect` on port `8000`.
 
-The first AKS manifest mounts `/app/models` as `emptyDir` only to preserve the container path. This is not enough for real YOLO inference.
+Kubernetes still exposes the service as `yolo-server:8001`, so the backend does not need a URL change.
+The service forwards port `8001` to the container HTTP port.
 
-Recommended future options:
+Future options:
 
-1. Azure Files PersistentVolume mounted to `/app/models`.
-2. Blob Storage initContainer that downloads the required model into an `emptyDir`.
-3. Model-included images are not recommended because they create large images.
+1. Keep using `burinake-ai-server:v2` while presentation/demo accuracy is the priority.
+2. Rebuild `burinake-yolo-server` so it exactly matches the `ai-server:v2` preprocessing, confidence threshold, and model selection.
+3. Move model files back out to Blob Storage only after the rebuilt YOLO server is verified against the same test images.
 
 VLM uses Azure OpenAI / AI Foundry as an external API. Do not deploy the VLM model itself into AKS.
 
@@ -160,7 +162,7 @@ VM 기반 Docker Compose 운영에서 AKS 기반 Kubernetes 운영으로 확장�
 
 ## Known Limitations
 
-- YOLO model provisioning is not solved yet.
+- YOLO currently uses `burinake-ai-server:v2` to preserve tested inference behavior.
 - PostgreSQL is temporary in-cluster storage for staging.
 - Ingress is optional and disabled by default.
 - Images still use `latest`; immutable tags should be added later.

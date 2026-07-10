@@ -21,56 +21,13 @@ spec:
         app.kubernetes.io/name: yolo-server
         app.kubernetes.io/part-of: burinake
     spec:
-      initContainers:
-        - name: download-yolo-model
-          image: mcr.microsoft.com/azure-cli:latest
-          imagePullPolicy: IfNotPresent
-          env:
-            - name: AZURE_STORAGE_CONNECTION_STRING
-              valueFrom:
-                secretKeyRef:
-                  name: burinake-runtime-secret
-                  key: AZURE_STORAGE_CONNECTION_STRING
-            - name: AZURE_BLOB_CONTAINER
-              valueFrom:
-                configMapKeyRef:
-                  name: burinake-config
-                  key: AZURE_BLOB_CONTAINER
-            - name: YOLO_MODEL_BLOB_NAME
-              valueFrom:
-                configMapKeyRef:
-                  name: burinake-config
-                  key: YOLO_MODEL_BLOB_NAME
-            - name: YOLO_MODEL_PATH
-              valueFrom:
-                configMapKeyRef:
-                  name: burinake-config
-                  key: YOLO_MODEL_PATH
-          command:
-            - sh
-            - -c
-            - |
-              mkdir -p "$(dirname "$YOLO_MODEL_PATH")"
-              az storage blob download \
-                --connection-string "$AZURE_STORAGE_CONNECTION_STRING" \
-                --container-name "$AZURE_BLOB_CONTAINER" \
-                --name "$YOLO_MODEL_BLOB_NAME" \
-                --file "$YOLO_MODEL_PATH" \
-                --overwrite
-              ls -lh "$YOLO_MODEL_PATH"
-          volumeMounts:
-            - name: yolo-models
-              mountPath: /app/models
-            - name: keyvault-secrets
-              mountPath: /mnt/secrets-store
-              readOnly: true
       containers:
         - name: yolo-server
-          image: burinakeacr.azurecr.io/burinake-yolo-server:latest
+          image: burinakeacr.azurecr.io/burinake-ai-server:v2
           imagePullPolicy: Always
           ports:
             - name: http
-              containerPort: 8001
+              containerPort: 8000
           resources:
             requests:
               cpu: 50m
@@ -78,20 +35,6 @@ spec:
             limits:
               cpu: 1500m
               memory: 1536Mi
-          env:
-            - name: APP_ENV
-              value: "prod"
-            - name: MODEL_PATH
-              valueFrom:
-                configMapKeyRef:
-                  name: burinake-config
-                  key: YOLO_MODEL_PATH
-          volumeMounts:
-            - name: yolo-models
-              mountPath: /app/models
-            - name: keyvault-secrets
-              mountPath: /mnt/secrets-store
-              readOnly: true
           readinessProbe:
             httpGet:
               path: /health
@@ -106,15 +49,6 @@ spec:
             initialDelaySeconds: 30
             periodSeconds: 20
             failureThreshold: 3
-      volumes:
-        - name: yolo-models
-          emptyDir: {}
-        - name: keyvault-secrets
-          csi:
-            driver: secrets-store.csi.k8s.io
-            readOnly: true
-            volumeAttributes:
-              secretProviderClass: burinake-keyvault-secrets
 ---
 apiVersion: v1
 kind: Service
