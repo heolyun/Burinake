@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   getIssueDetail,
@@ -7,6 +7,7 @@ import {
   updateIssueStatus,
   type IssueDetail,
   type IssueStatus,
+  type SnapshotImage,
   type VlmResultDetail,
 } from '../api/issueApi';
 import {
@@ -17,9 +18,10 @@ import {
   type EmergencyReport,
   type ReportStatus,
 } from '../api/reportApi';
-import { IssueLevelBadge } from '../components/issue/IssueLevelBadge';
 import { IssueStatusBadge } from '../components/issue/IssueStatusBadge';
 import { ReportStatusBadge } from '../components/report/ReportStatusBadge';
+
+const INITIAL_TIMELINE_COUNT = 10;
 
 function formatDateTime(value?: string | null) {
   if (!value) return '-';
@@ -54,7 +56,51 @@ function detectionTypeLabel(type?: string | null) {
   return type ? labels[type] ?? type : '-';
 }
 
-function getBoxStyle(box: IssueDetail['detectionBoxes'][number], image: IssueDetail['triggerImage']) {
+function issueStatusText(status: IssueStatus) {
+  const labels: Record<IssueStatus, string> = {
+    CANDIDATE: '신고 검토 필요',
+    VLM_ANALYZING: 'AI 분석 중',
+    REAL_FIRE: '화재 의심',
+    FALSE_ALARM: '오탐 처리',
+    REPORTED: '신고 요청 생성됨',
+    CLOSED: '종료',
+  };
+  return labels[status] ?? status;
+}
+
+function finalJudgement(issueStatus: IssueStatus, latestVlmResult?: VlmResultDetail | null) {
+  if (issueStatus === 'FALSE_ALARM') return '오탐 가능';
+  if (issueStatus === 'CLOSED') return '종료됨';
+  if (issueStatus === 'VLM_ANALYZING') return '분석 중';
+  if (latestVlmResult?.isRealFire === false) return '오탐 가능';
+  if (latestVlmResult?.isRealFire === true || issueStatus === 'REAL_FIRE' || issueStatus === 'REPORTED') return '화재 의심';
+  return '판단 대기';
+}
+
+function judgementTone(issueStatus: IssueStatus, latestVlmResult?: VlmResultDetail | null) {
+  const judgement = finalJudgement(issueStatus, latestVlmResult);
+  if (judgement === '화재 의심') return 'danger';
+  if (judgement === '오탐 가능' || judgement === '종료됨') return 'calm';
+  return 'warning';
+}
+
+function levelText(level?: number | null) {
+  if (!level) return '미판단';
+  return `Level ${level}`;
+}
+
+function reportStatusText(status: ReportStatus) {
+  const labels: Record<ReportStatus, string> = {
+    DRAFT: '승인 대기',
+    APPROVED: '승인됨',
+    SENT: '전송 완료',
+    FAILED: '전송 실패',
+    CANCELED: '취소',
+  };
+  return labels[status] ?? status;
+}
+
+function getBoxStyle(box: IssueDetail['detectionBoxes'][number], image: SnapshotImage | null) {
   const imageWidth = image?.widthPx ?? 1;
   const imageHeight = image?.heightPx ?? 1;
   const x = box.x ?? 0;
@@ -77,6 +123,8 @@ export function IssueDetailPage() {
   const [detail, setDetail] = useState<IssueDetail | null>(null);
   const [vlmHistory, setVlmHistory] = useState<VlmResultDetail[]>([]);
   const [reports, setReports] = useState<EmergencyReport[]>([]);
+  const [selectedImageId, setSelectedImageId] = useState<number | null>(null);
+  const [showAllTimeline, setShowAllTimeline] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +147,7 @@ export function IssueDetailPage() {
       setDetail(issueDetail);
       setVlmHistory(vlmResults);
       setReports(issueReports);
+      setSelectedImageId((current) => current ?? issueDetail.triggerImage?.imageId ?? issueDetail.timeline[0]?.imageId ?? null);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '이슈 상세를 불러오지 못했습니다.');
     } finally {
@@ -193,41 +242,70 @@ export function IssueDetailPage() {
   }
 
   const { issue, triggerImage, yoloResult, detectionBoxes, latestVlmResult, timeline } = detail;
+  const selectedSnapshot = timeline.find((snapshot) => snapshot.imageId === selectedImageId) ?? triggerImage ?? timeline[0] ?? null;
+  const boxesForSelectedImage = selectedSnapshot?.imageId === yoloResult?.imageId ? detectionBoxes : [];
+  const sortedVlmHistory = [...vlmHistory].sort((a, b) => b.analysisRound - a.analysisRound);
+  const visibleTimeline = showAllTimeline ? timeline : timeline.slice(0, INITIAL_TIMELINE_COUNT);
+  const pendingReport = reports.find((report) => report.reportStatus === 'DRAFT');
+  const judgement = finalJudgement(issue.issueStatus, latestVlmResult);
+  const tone = judgementTone(issue.issueStatus, latestVlmResult);
+  const primaryActionLabel = pendingReport ? '119 신고 승인' : '신고 초안 생성';
+
+  const handlePrimaryReportAction = () => {
+    if (pendingReport) {
+      void changeReportStatus(pendingReport.reportId, 'APPROVED');
+      return;
+    }
+    void createDraft();
+  };
 
   return (
-    <div className="page-stack">
-      <section className="page-title split">
+    <div className="page-stack issue-detail-page">
+      <section className={`issue-hero hero-${tone}`}>
         <div>
           <Link className="text-link" to="/issues">
             이슈 관리
           </Link>
-          <h1>Issue #{issue.issueId}</h1>
-          <p className="muted">
-            {issue.cctvName ?? '-'} {issue.cctvNum ?? ''} / {typeLabel(issue.issueType)}
+          <div className="issue-hero-title">
+            <h1>Issue #{issue.issueId}</h1>
+            <span className={`hero-level level-tone-${issue.latestLevel ?? 'empty'}`}>{levelText(issue.latestLevel)}</span>
+            <IssueStatusBadge status={issue.issueStatus} />
+          </div>
+          <p>
+            {issue.cctvName ?? '-'} {issue.cctvNum ?? ''} / {issue.location ?? '위치 미등록'} / {typeLabel(issue.issueType)}
           </p>
         </div>
-        <div className="title-actions">
-          <IssueLevelBadge level={issue.latestLevel} />
-          <IssueStatusBadge status={issue.issueStatus} />
+        <div className="hero-status-card">
+          <span>현재 상태</span>
+          <strong>{issueStatusText(issue.issueStatus)}</strong>
+          <small>최근 업데이트 {formatDateTime(issue.updatedAt)}</small>
         </div>
       </section>
 
       {error ? <div className="message-box error-text">{error}</div> : null}
 
-      <section className="issue-overview-grid">
-        <article className="panel image-panel">
+      <section className="control-grid">
+        <article className="panel detection-card">
           <div className="panel-title">
-            <h2>감지 이미지</h2>
-            <span>{triggerImage ? `#${triggerImage.imageId}` : '-'}</span>
+            <div>
+              <h2>감지 이미지</h2>
+              <span>
+                {selectedSnapshot ? `#${selectedSnapshot.imageId}` : '-'} / {formatDateTime(selectedSnapshot?.snapshotTime)}
+              </span>
+            </div>
+            <div className="image-badge-row">
+              <span className={yoloResult?.isFire ? 'signal-badge danger' : 'signal-badge calm'}>화재 {boolLabel(yoloResult?.isFire)}</span>
+              <span className={yoloResult?.isSmoke ? 'signal-badge warning' : 'signal-badge calm'}>연기 {boolLabel(yoloResult?.isSmoke)}</span>
+            </div>
           </div>
-          {triggerImage ? (
+          {selectedSnapshot ? (
             <div className="snapshot-stage">
-              <img src={getSnapshotImageContentUrl(triggerImage.imageId)} alt={`Snapshot ${triggerImage.imageId}`} />
-              {detectionBoxes.map((box) => (
+              <img src={getSnapshotImageContentUrl(selectedSnapshot.imageId)} alt={`Snapshot ${selectedSnapshot.imageId}`} />
+              {boxesForSelectedImage.map((box) => (
                 <div
                   className={`detection-box detection-${box.detectionType.toLowerCase()}`}
                   key={box.boxId}
-                  style={getBoxStyle(box, triggerImage)}
+                  style={getBoxStyle(box, selectedSnapshot)}
                 >
                   <span>
                     {detectionTypeLabel(box.detectionType)} {box.confidence == null ? '' : `${Math.round(box.confidence * 100)}%`}
@@ -239,220 +317,188 @@ export function IssueDetailPage() {
             <div className="snapshot-placeholder">이미지 없음</div>
           )}
           <div className="image-caption">
-            <span>{triggerImage?.storageKey ?? '-'}</span>
-            <strong>{triggerImage?.widthPx ?? '-'} x {triggerImage?.heightPx ?? '-'}</strong>
+            <span>{selectedSnapshot?.storageKey ?? '-'}</span>
+            <strong>{selectedSnapshot?.widthPx ?? '-'} x {selectedSnapshot?.heightPx ?? '-'}</strong>
           </div>
+          {selectedSnapshot && boxesForSelectedImage.length === 0 ? (
+            <p className="muted image-note">선택한 snapshot에는 현재 응답 구조상 연결된 bbox가 없습니다.</p>
+          ) : null}
         </article>
 
-        <aside className="panel issue-summary-panel">
-          <div className="panel-title">
-            <h2>핵심 판단</h2>
-            <span>{isActionLoading ? '처리 중' : '대기'}</span>
+        <aside className={`panel decision-card decision-${tone}`}>
+          <div className="decision-header">
+            <span>최종 판단</span>
+            <strong>{judgement}</strong>
           </div>
-          <dl className="kv-grid compact">
+          <dl className="decision-metrics">
             <div>
-              <dt>최초/최근 감지</dt>
-              <dd>{formatDateTime(issue.detectedAt)}</dd>
+              <dt>위험 레벨</dt>
+              <dd>{levelText(issue.latestLevel)}</dd>
             </div>
             <div>
-              <dt>YOLO</dt>
+              <dt>신뢰도</dt>
+              <dd>{formatNumber(latestVlmResult?.confidence ?? yoloResult?.fireConfidence)}</dd>
+            </div>
+            <div>
+              <dt>YOLO 결과</dt>
               <dd>
                 화재 {boolLabel(yoloResult?.isFire)} / 연기 {boolLabel(yoloResult?.isSmoke)}
               </dd>
             </div>
             <div>
-              <dt>bbox</dt>
-              <dd>{detectionBoxes.length}개</dd>
-            </div>
-            <div>
-              <dt>VLM 실제 화재</dt>
-              <dd>{boolLabel(latestVlmResult?.isRealFire)}</dd>
+              <dt>분석 시간</dt>
+              <dd>{formatDateTime(latestVlmResult?.analyzedAt ?? issue.lastVlmAnalyzedAt)}</dd>
             </div>
           </dl>
-          <div className="judgement-box">
-            <strong>판단 내용 원문</strong>
-            <p>{latestVlmResult?.message || issue.latestMessage || '저장된 판단 내용이 없습니다.'}</p>
+          <div className="decision-summary">
+            <strong>VLM 판단 요약</strong>
+            <p>{latestVlmResult?.message || latestVlmResult?.situationSummary || issue.latestMessage || '저장된 판단 내용이 없습니다.'}</p>
           </div>
-          <div className="row-actions">
-            <button className="secondary-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('REAL_FIRE')}>
-              실제 화재
+          <div className="decision-actions">
+            <button className="primary-button action-strong" type="button" disabled={isActionLoading || !latestVlmResult} onClick={handlePrimaryReportAction}>
+              {primaryActionLabel}
             </button>
-            <button className="ghost-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('FALSE_ALARM')}>
+            <button className="secondary-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('FALSE_ALARM')}>
               오탐 처리
             </button>
             <button className="ghost-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('CLOSED')}>
               종료
             </button>
-            <button className="primary-button" type="button" disabled={isActionLoading || !latestVlmResult} onClick={() => void createDraft()}>
-              신고 초안 생성
-            </button>
           </div>
         </aside>
       </section>
 
-      <section className="panel table-panel">
-        <div className="panel-title padded-title">
-          <h2>신고 이력</h2>
-          <span>{reports.length}건</span>
-        </div>
-        <table>
-          <thead>
-            <tr>
-              <th>reportId</th>
-              <th>상태</th>
-              <th>수신처</th>
-              <th>승인</th>
-              <th>전송</th>
-              <th>메시지</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {reports.map((report) => (
-              <tr key={report.reportId}>
-                <td>#{report.reportId}</td>
-                <td>
-                  <ReportStatusBadge status={report.reportStatus} />
-                </td>
-                <td>{report.receiver}</td>
-                <td>{report.approvedBy ?? '-'}</td>
-                <td>{formatDateTime(report.sentAt)}</td>
-                <td className="wide-cell">{report.reportMessage}</td>
-                <td>
+      <section className="operations-grid">
+        <div className="operations-main">
+          <section className="panel">
+            <div className="panel-title">
+              <h2>신고 이벤트</h2>
+              <span>{reports.length}건</span>
+            </div>
+            <div className="report-card-list">
+              {reports.map((report, index) => (
+                <article className="report-event-card" key={report.reportId}>
+                  <div className="report-event-head">
+                    <div>
+                      <strong>신고 이벤트 #{index + 1}</strong>
+                      <span>Report #{report.reportId}</span>
+                    </div>
+                    <ReportStatusBadge status={report.reportStatus} />
+                  </div>
+                  <dl className="report-meta-grid">
+                    <div>
+                      <dt>상태</dt>
+                      <dd>{reportStatusText(report.reportStatus)}</dd>
+                    </div>
+                    <div>
+                      <dt>수신자</dt>
+                      <dd>{report.receiver}</dd>
+                    </div>
+                    <div>
+                      <dt>승인</dt>
+                      <dd>{report.approvedBy ?? '-'}</dd>
+                    </div>
+                    <div>
+                      <dt>전송</dt>
+                      <dd>{formatDateTime(report.sentAt)}</dd>
+                    </div>
+                  </dl>
+                  <details className="report-message" open={index === 0}>
+                    <summary>메시지 내용</summary>
+                    <p>{report.reportMessage}</p>
+                  </details>
                   <div className="row-actions">
                     {report.reportStatus === 'DRAFT' ? (
-                      <button
-                        className="secondary-button"
-                        type="button"
-                        disabled={isActionLoading}
-                        onClick={() => void changeReportStatus(report.reportId, 'APPROVED')}
-                      >
+                      <button className="primary-button" type="button" disabled={isActionLoading} onClick={() => void changeReportStatus(report.reportId, 'APPROVED')}>
                         승인
                       </button>
                     ) : null}
                     {report.reportStatus === 'DRAFT' || report.reportStatus === 'APPROVED' ? (
-                      <button
-                        className="primary-button"
-                        type="button"
-                        disabled={isActionLoading}
-                        onClick={() => void changeReportStatus(report.reportId, 'SENT')}
-                      >
-                        전송 처리
+                      <button className="secondary-button" type="button" disabled={isActionLoading} onClick={() => void changeReportStatus(report.reportId, 'SENT')}>
+                        전송 기록
                       </button>
                     ) : null}
                     {report.reportStatus !== 'SENT' && report.reportStatus !== 'CANCELED' ? (
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        disabled={isActionLoading}
-                        onClick={() => void changeReportStatus(report.reportId, 'CANCELED')}
-                      >
+                      <button className="ghost-button" type="button" disabled={isActionLoading} onClick={() => void changeReportStatus(report.reportId, 'CANCELED')}>
                         취소
                       </button>
                     ) : null}
                     {report.reportStatus === 'DRAFT' ? (
-                      <button
-                        className="danger-button"
-                        type="button"
-                        disabled={isActionLoading}
-                        onClick={() => void removeReportDraft(report.reportId)}
-                      >
+                      <button className="danger-button" type="button" disabled={isActionLoading} onClick={() => void removeReportDraft(report.reportId)}>
                         삭제
                       </button>
                     ) : null}
                   </div>
-                </td>
-              </tr>
-            ))}
-            {reports.length === 0 ? (
-              <tr>
-                <td colSpan={7}>
-                  <span className="muted">생성된 신고가 없습니다.</span>
-                </td>
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </section>
-
-      <section className="detail-grid">
-        <article className="panel table-panel">
-          <div className="panel-title padded-title">
-            <h2>VLM 이력</h2>
-            <span>{vlmHistory.length}건</span>
-          </div>
-          <table>
-            <thead>
-              <tr>
-                <th>round</th>
-                <th>실제 화재</th>
-                <th>Level</th>
-                <th>confidence</th>
-                <th>분석 시각</th>
-              </tr>
-            </thead>
-            <tbody>
-              {vlmHistory.map((vlm) => (
-                <tr key={vlm.vlmResultId}>
-                  <td>{vlm.analysisRound}</td>
-                  <td>{vlm.isRealFire == null ? '-' : vlm.isRealFire ? 'true' : 'false'}</td>
-                  <td>{vlm.level ?? '-'}</td>
-                  <td>{formatNumber(vlm.confidence)}</td>
-                  <td>{formatDateTime(vlm.analyzedAt)}</td>
-                </tr>
+                </article>
               ))}
-              {vlmHistory.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>
-                    <span className="muted">VLM 이력이 없습니다.</span>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-          {vlmHistory.length > 0 ? (
-            <div className="history-message-list">
-              {vlmHistory.map((vlm) => (
-                <details key={`message-${vlm.vlmResultId}`} open={vlm.analysisRound === latestVlmResult?.analysisRound}>
-                  <summary>round {vlm.analysisRound} 판단 내용 원문</summary>
-                  <p>{vlm.message ?? vlm.situationSummary ?? '-'}</p>
+              {reports.length === 0 ? <div className="empty-panel">생성된 신고가 없습니다.</div> : null}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="panel-title">
+              <h2>VLM 이력</h2>
+              <span>{sortedVlmHistory.length}건</span>
+            </div>
+            <div className="vlm-round-list">
+              {sortedVlmHistory.map((vlm, index) => (
+                <details className="vlm-round-card" key={vlm.vlmResultId} open={index === 0}>
+                  <summary>
+                    <span>round {vlm.analysisRound}</span>
+                    <strong>{vlm.isRealFire ? '화재 가능' : '오탐 가능'}</strong>
+                    <em>{levelText(vlm.level)} / confidence {formatNumber(vlm.confidence)}</em>
+                  </summary>
+                  <dl className="report-meta-grid">
+                    <div>
+                      <dt>감지 여부</dt>
+                      <dd>{boolLabel(vlm.isRealFire)}</dd>
+                    </div>
+                    <div>
+                      <dt>분석 시간</dt>
+                      <dd>{formatDateTime(vlm.analyzedAt)}</dd>
+                    </div>
+                  </dl>
+                  <div className="decision-summary compact-summary">
+                    <strong>VLM 판단 요약</strong>
+                    <p>{vlm.message ?? vlm.situationSummary ?? '-'}</p>
+                  </div>
+                  {vlm.rawResponse ? (
+                    <details className="raw-response">
+                      <summary>원문 보기</summary>
+                      <pre>{vlm.rawResponse}</pre>
+                    </details>
+                  ) : null}
                 </details>
               ))}
+              {sortedVlmHistory.length === 0 ? <div className="empty-panel">VLM 이력이 없습니다.</div> : null}
             </div>
-          ) : null}
-        </article>
+          </section>
+        </div>
 
-        <aside className="panel table-panel">
-          <div className="panel-title padded-title">
+        <aside className="panel timeline-panel">
+          <div className="panel-title">
             <h2>Snapshot Timeline</h2>
             <span>{timeline.length}장</span>
           </div>
-          <table>
-            <thead>
-              <tr>
-                <th>imageId</th>
-                <th>image</th>
-                <th>snapshotTime</th>
-                <th>storageKey</th>
-              </tr>
-            </thead>
-            <tbody>
-              {timeline.map((snapshot) => (
-                <tr key={snapshot.imageId}>
-                  <td>#{snapshot.imageId}</td>
-                  <td>
-                    <img
-                      className="timeline-thumb"
-                      src={getSnapshotImageContentUrl(snapshot.imageId)}
-                      alt={`Snapshot ${snapshot.imageId}`}
-                    />
-                  </td>
-                  <td>{formatDateTime(snapshot.snapshotTime)}</td>
-                  <td className="wide-cell">{snapshot.storageKey ?? '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="snapshot-select-list">
+            {visibleTimeline.map((snapshot) => (
+              <button
+                className={snapshot.imageId === selectedSnapshot?.imageId ? 'snapshot-select-item active' : 'snapshot-select-item'}
+                key={snapshot.imageId}
+                type="button"
+                onClick={() => setSelectedImageId(snapshot.imageId)}
+              >
+                <img src={getSnapshotImageContentUrl(snapshot.imageId)} alt={`Snapshot ${snapshot.imageId}`} />
+                <span>#{snapshot.imageId}</span>
+                <strong>{formatDateTime(snapshot.snapshotTime)}</strong>
+              </button>
+            ))}
+          </div>
+          {timeline.length > INITIAL_TIMELINE_COUNT ? (
+            <button className="secondary-button timeline-more-button" type="button" onClick={() => setShowAllTimeline((current) => !current)}>
+              {showAllTimeline ? '접기' : `더보기 ${timeline.length - INITIAL_TIMELINE_COUNT}장`}
+            </button>
+          ) : null}
         </aside>
       </section>
     </div>
