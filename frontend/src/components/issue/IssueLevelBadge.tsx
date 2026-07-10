@@ -3,6 +3,6 @@ type Props = {
 };
 
 export function IssueLevelBadge({ level }: Props) {
-  if (!level) return <span className="badge level-empty">미판정</span>;
+  if (!level) return <span className="badge level-empty">미판단</span>;
   return <span className={`badge level-${level}`}>Level {level}</span>;
 }

@@ -3,6 +3,7 @@ package com.burinake.mapper;
 import com.burinake.domain.IssueRow;
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -15,6 +16,31 @@ public interface IssueMapper {
 
     @Select("SELECT nextval('issue_issue_id_seq')")
     Long nextId();
+
+    @Select("""
+            SELECT
+                issue_id, cctv_id, trigger_image_id, yolo_result_id, issue_type, issue_status,
+                detected_at, vlm_input_start_time, vlm_input_end_time, latest_is_real_fire,
+                latest_level, latest_message, vlm_analyzed_at, last_detected_at,
+                last_yolo_analyzed_at, last_vlm_analyzed_at, last_notified_at,
+                max_box_area_ratio, last_box_area_ratio, snapshot_count, created_at, updated_at
+            FROM issue
+            ORDER BY COALESCE(last_detected_at, detected_at) DESC
+            LIMIT #{limit}
+            """)
+    List<IssueRow> findRecent(@Param("limit") int limit);
+
+    @Select("""
+            SELECT
+                issue_id, cctv_id, trigger_image_id, yolo_result_id, issue_type, issue_status,
+                detected_at, vlm_input_start_time, vlm_input_end_time, latest_is_real_fire,
+                latest_level, latest_message, vlm_analyzed_at, last_detected_at,
+                last_yolo_analyzed_at, last_vlm_analyzed_at, last_notified_at,
+                max_box_area_ratio, last_box_area_ratio, snapshot_count, created_at, updated_at
+            FROM issue
+            WHERE issue_id = #{issueId}
+            """)
+    IssueRow findById(@Param("issueId") Long issueId);
 
     @Select("""
             SELECT
@@ -102,6 +128,26 @@ public interface IssueMapper {
             @Param("lastDetectedAt") OffsetDateTime lastDetectedAt,
             @Param("lastYoloAnalyzedAt") OffsetDateTime lastYoloAnalyzedAt,
             @Param("boxAreaRatio") BigDecimal boxAreaRatio,
+            @Param("updatedAt") OffsetDateTime updatedAt
+    );
+
+    @Update("""
+            UPDATE issue
+            SET issue_status = #{issueStatus},
+                latest_is_real_fire = COALESCE(#{latestIsRealFire}, latest_is_real_fire),
+                latest_level = COALESCE(#{latestLevel}, latest_level),
+                latest_message = COALESCE(#{latestMessage}, latest_message),
+                last_notified_at = COALESCE(#{lastNotifiedAt}, last_notified_at),
+                updated_at = #{updatedAt}
+            WHERE issue_id = #{issueId}
+            """)
+    int updateManualStatus(
+            @Param("issueId") Long issueId,
+            @Param("issueStatus") String issueStatus,
+            @Param("latestIsRealFire") Boolean latestIsRealFire,
+            @Param("latestLevel") Integer latestLevel,
+            @Param("latestMessage") String latestMessage,
+            @Param("lastNotifiedAt") OffsetDateTime lastNotifiedAt,
             @Param("updatedAt") OffsetDateTime updatedAt
     );
 }

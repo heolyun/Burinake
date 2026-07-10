@@ -1,4 +1,4 @@
-import { ReportStatus } from '../../mocks/mockData';
+import type { ReportStatus } from '../../api/reportApi';
 
 type Props = {
   status: ReportStatus;
@@ -13,5 +13,5 @@ const labels: Record<ReportStatus, string> = {
 };
 
 export function ReportStatusBadge({ status }: Props) {
-  return <span className={`badge report-status-${status.toLowerCase()}`}>{labels[status]}</span>;
+  return <span className={`badge report-status-${status.toLowerCase()}`}>{labels[status] ?? status}</span>;
 }

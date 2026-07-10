@@ -1,6 +1,7 @@
 package com.burinake.mapper;
 
 import com.burinake.domain.VlmResultRow;
+import java.util.List;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Options;
@@ -19,6 +20,27 @@ public interface VlmResultMapper {
             WHERE issue_id = #{issueId}
             """)
     Integer nextAnalysisRound(@Param("issueId") Long issueId);
+
+    @Select("""
+            SELECT vlm_result_id, issue_id, analysis_round, model_name, model_version,
+                   is_real_fire, fire_start, fire_reason, situation_summary, level,
+                   message, confidence, raw_response, analyzed_at
+            FROM vlm_result
+            WHERE issue_id = #{issueId}
+            ORDER BY analysis_round DESC
+            LIMIT 1
+            """)
+    VlmResultRow findLatestByIssueId(@Param("issueId") Long issueId);
+
+    @Select("""
+            SELECT vlm_result_id, issue_id, analysis_round, model_name, model_version,
+                   is_real_fire, fire_start, fire_reason, situation_summary, level,
+                   message, confidence, raw_response, analyzed_at
+            FROM vlm_result
+            WHERE issue_id = #{issueId}
+            ORDER BY analysis_round DESC
+            """)
+    List<VlmResultRow> findByIssueId(@Param("issueId") Long issueId);
 
     @Insert("""
             INSERT INTO vlm_result (

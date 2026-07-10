@@ -148,7 +148,8 @@ dt,
 .title-actions,
 .action-bar,
 .filter-bar,
-.form-footer {
+.form-footer,
+.row-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -357,6 +358,16 @@ dt,
   color: #9d2e20;
 }
 
+.status-active {
+  background: #d9f3e3;
+  color: #17643a;
+}
+
+.status-inactive {
+  background: #e2e9ef;
+  color: #3e4f60;
+}
+
 .filter-bar,
 .action-bar {
   padding: 14px;
@@ -386,6 +397,16 @@ label {
   gap: 8px;
   color: #344657;
   font-weight: 700;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+}
+
+.checkbox-row input {
+  width: auto;
 }
 
 .form-panel,
@@ -516,6 +537,10 @@ dd {
   padding: 0;
 }
 
+.table-panel .padded-title {
+  padding: 18px 18px 0;
+}
+
 table {
   width: 100%;
   min-width: 940px;
@@ -538,6 +563,12 @@ th {
 
 td {
   color: #283847;
+}
+
+.wide-cell {
+  max-width: 360px;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
 }
 
 .stepper {

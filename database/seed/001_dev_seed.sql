@@ -99,6 +99,39 @@ seeded_issue AS (
     FROM seeded_image i
     JOIN seeded_yolo y ON y.image_id = i.image_id
     RETURNING issue_id, trigger_image_id
+),
+seeded_vlm AS (
+    INSERT INTO vlm_result (
+        issue_id,
+        analysis_round,
+        model_name,
+        model_version,
+        is_real_fire,
+        fire_start,
+        fire_reason,
+        situation_summary,
+        level,
+        message,
+        confidence,
+        raw_response,
+        analyzed_at
+    )
+    SELECT
+        issue_id,
+        1,
+        'dev-vlm',
+        'dev',
+        true,
+        'unknown',
+        'Visible flame-like region detected near the parking lot entrance.',
+        'Possible fire detected at the B1 parking lot entrance.',
+        3,
+        'Possible fire detected. On-site verification is required.',
+        0.8800,
+        '{"source":"dev_seed"}'::jsonb,
+        now()
+    FROM seeded_issue
+    RETURNING vlm_result_id
 )
 INSERT INTO issue_snapshot (issue_id, image_id, sequence_no, relative_seconds, is_trigger_image)
 SELECT issue_id, trigger_image_id, 1, 0, true
