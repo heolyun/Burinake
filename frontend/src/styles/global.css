@@ -810,6 +810,12 @@ button:hover,
   background: #f8fbfd;
 }
 
+.vlm-round-card.active {
+  border-color: #e35d3f;
+  background: #fff7f3;
+  box-shadow: inset 0 0 0 1px rgba(227, 93, 63, 0.18);
+}
+
 .report-event-head {
   display: flex;
   align-items: center;
@@ -870,6 +876,30 @@ button:hover,
   color: #647586;
   font-style: normal;
   font-weight: 800;
+}
+
+.round-image-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 10px 12px;
+  border: 1px solid #d8e2eb;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.round-image-link span {
+  color: #647586;
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.round-image-button {
+  min-height: 34px;
+  padding: 6px 12px;
+  white-space: nowrap;
 }
 
 .timeline-panel {

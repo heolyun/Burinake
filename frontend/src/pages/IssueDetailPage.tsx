@@ -117,6 +117,37 @@ function getBoxStyle(box: IssueDetail['detectionBoxes'][number], image: Snapshot
   };
 }
 
+function toTimestamp(value?: string | null) {
+  const timestamp = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(timestamp) ? timestamp : null;
+}
+
+function findSnapshotForVlmRound(vlm: VlmResultDetail, timeline: SnapshotImage[]) {
+  if (timeline.length === 0) return null;
+
+  const fallbackIndex = Math.max(0, Math.min(timeline.length - 1, vlm.analysisRound - 1));
+  const fallbackSnapshot = timeline[fallbackIndex] ?? timeline[0] ?? null;
+  const analyzedAt = toTimestamp(vlm.analyzedAt);
+
+  if (analyzedAt == null) return fallbackSnapshot;
+
+  let closestSnapshot = fallbackSnapshot;
+  let closestDelta = Number.POSITIVE_INFINITY;
+
+  for (const snapshot of timeline) {
+    const snapshotTime = toTimestamp(snapshot.snapshotTime);
+    if (snapshotTime == null) continue;
+
+    const delta = Math.abs(snapshotTime - analyzedAt);
+    if (delta < closestDelta) {
+      closestSnapshot = snapshot;
+      closestDelta = delta;
+    }
+  }
+
+  return closestSnapshot;
+}
+
 export function IssueDetailPage() {
   const { issueId } = useParams();
   const numericIssueId = Number(issueId);
@@ -124,6 +155,7 @@ export function IssueDetailPage() {
   const [vlmHistory, setVlmHistory] = useState<VlmResultDetail[]>([]);
   const [reports, setReports] = useState<EmergencyReport[]>([]);
   const [selectedImageId, setSelectedImageId] = useState<number | null>(null);
+  const [selectedVlmResultId, setSelectedVlmResultId] = useState<number | null>(null);
   const [showAllTimeline, setShowAllTimeline] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isActionLoading, setIsActionLoading] = useState(false);
@@ -147,6 +179,7 @@ export function IssueDetailPage() {
       setDetail(issueDetail);
       setVlmHistory(vlmResults);
       setReports(issueReports);
+      setSelectedVlmResultId((current) => current ?? [...vlmResults].sort((a, b) => b.analysisRound - a.analysisRound)[0]?.vlmResultId ?? null);
       setSelectedImageId((current) => current ?? issueDetail.triggerImage?.imageId ?? issueDetail.timeline[0]?.imageId ?? null);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : '이슈 상세를 불러오지 못했습니다.');
@@ -250,6 +283,18 @@ export function IssueDetailPage() {
   const judgement = finalJudgement(issue.issueStatus, latestVlmResult);
   const tone = judgementTone(issue.issueStatus, latestVlmResult);
   const primaryActionLabel = pendingReport ? '119 신고 승인' : '신고 초안 생성';
+
+  const selectVlmRoundImage = (vlm: VlmResultDetail) => {
+    const roundSnapshot = findSnapshotForVlmRound(vlm, timeline);
+    setSelectedVlmResultId(vlm.vlmResultId);
+
+    if (!roundSnapshot) return;
+
+    setSelectedImageId(roundSnapshot.imageId);
+    if (timeline.findIndex((snapshot) => snapshot.imageId === roundSnapshot.imageId) >= INITIAL_TIMELINE_COUNT) {
+      setShowAllTimeline(true);
+    }
+  };
 
   const handlePrimaryReportAction = () => {
     if (pendingReport) {
@@ -441,35 +486,50 @@ export function IssueDetailPage() {
               <span>{sortedVlmHistory.length}건</span>
             </div>
             <div className="vlm-round-list">
-              {sortedVlmHistory.map((vlm, index) => (
-                <details className="vlm-round-card" key={vlm.vlmResultId} open={index === 0}>
-                  <summary>
-                    <span>round {vlm.analysisRound}</span>
-                    <strong>{vlm.isRealFire ? '화재 가능' : '오탐 가능'}</strong>
-                    <em>{levelText(vlm.level)} / confidence {formatNumber(vlm.confidence)}</em>
-                  </summary>
-                  <dl className="report-meta-grid">
-                    <div>
-                      <dt>감지 여부</dt>
-                      <dd>{boolLabel(vlm.isRealFire)}</dd>
+              {sortedVlmHistory.map((vlm, index) => {
+                const roundSnapshot = findSnapshotForVlmRound(vlm, timeline);
+                const isSelectedRound = vlm.vlmResultId === selectedVlmResultId;
+
+                return (
+                  <details
+                    className={isSelectedRound ? 'vlm-round-card active' : 'vlm-round-card'}
+                    key={vlm.vlmResultId}
+                    open={index === 0 || isSelectedRound}
+                  >
+                    <summary onClick={() => selectVlmRoundImage(vlm)}>
+                      <span>round {vlm.analysisRound}</span>
+                      <strong>{vlm.isRealFire ? '화재 가능' : '오탐 가능'}</strong>
+                      <em>{levelText(vlm.level)} / confidence {formatNumber(vlm.confidence)}</em>
+                    </summary>
+                    <div className="round-image-link">
+                      <span>연결 snapshot {roundSnapshot ? `#${roundSnapshot.imageId}` : '-'}</span>
+                      <button className="secondary-button round-image-button" type="button" onClick={() => selectVlmRoundImage(vlm)}>
+                        이미지 보기
+                      </button>
                     </div>
-                    <div>
-                      <dt>분석 시간</dt>
-                      <dd>{formatDateTime(vlm.analyzedAt)}</dd>
+                    <dl className="report-meta-grid">
+                      <div>
+                        <dt>감지 여부</dt>
+                        <dd>{boolLabel(vlm.isRealFire)}</dd>
+                      </div>
+                      <div>
+                        <dt>분석 시간</dt>
+                        <dd>{formatDateTime(vlm.analyzedAt)}</dd>
+                      </div>
+                    </dl>
+                    <div className="decision-summary compact-summary">
+                      <strong>VLM 판단 요약</strong>
+                      <p>{vlm.message ?? vlm.situationSummary ?? '-'}</p>
                     </div>
-                  </dl>
-                  <div className="decision-summary compact-summary">
-                    <strong>VLM 판단 요약</strong>
-                    <p>{vlm.message ?? vlm.situationSummary ?? '-'}</p>
-                  </div>
-                  {vlm.rawResponse ? (
-                    <details className="raw-response">
-                      <summary>원문 보기</summary>
-                      <pre>{vlm.rawResponse}</pre>
-                    </details>
-                  ) : null}
-                </details>
-              ))}
+                    {vlm.rawResponse ? (
+                      <details className="raw-response">
+                        <summary>원문 보기</summary>
+                        <pre>{vlm.rawResponse}</pre>
+                      </details>
+                    ) : null}
+                  </details>
+                );
+              })}
               {sortedVlmHistory.length === 0 ? <div className="empty-panel">VLM 이력이 없습니다.</div> : null}
             </div>
           </section>
