@@ -290,9 +290,7 @@ export function FireDetectionPage() {
         <aside className="panel upload-preview">
           <div className="panel-title">
             <h2>Snapshot</h2>
-            <span>
-              {currentFile ? `${currentFileIndex + 1}/${selectedFiles.length} ${currentFile.name}` : '이미지 미선택'}
-            </span>
+            <span>{currentFile ? `${currentFileIndex + 1}/${selectedFiles.length} ${currentFile.name}` : '이미지 미선택'}</span>
           </div>
           {previewUrl ? <img src={previewUrl} alt="선택한 snapshot 미리보기" /> : <div className="empty-panel">이미지를 선택해 주세요.</div>}
         </aside>
