@@ -14,6 +14,8 @@ public interface ImageStorageService {
 
     StoredImage storeReport(MultipartFile file, Long reportId, LocalDate createdDate) throws IOException;
 
+    byte[] read(String storageKey) throws IOException;
+
     record StoredImage(
             String blobPath,
             String blobUrl,

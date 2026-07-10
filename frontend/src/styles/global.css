@@ -43,8 +43,6 @@ img {
 }
 
 .app-layout {
-  display: grid;
-  grid-template-columns: 252px minmax(0, 1fr);
   min-height: 100vh;
   background:
     linear-gradient(180deg, rgba(245, 248, 251, 0.96), rgba(230, 237, 243, 1)),
@@ -54,13 +52,16 @@ img {
 .sidebar {
   position: sticky;
   top: 0;
+  z-index: 10;
   display: flex;
-  flex-direction: column;
-  gap: 28px;
-  height: 100vh;
-  padding: 24px 18px;
-  border-right: 1px solid #d5e0ea;
-  background: #f7fafc;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 72px;
+  padding: 12px 28px;
+  border-bottom: 1px solid #d5e0ea;
+  background: rgba(247, 250, 252, 0.96);
+  backdrop-filter: blur(12px);
 }
 
 .brand {
@@ -95,12 +96,15 @@ dt,
 }
 
 .sidebar nav {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
 }
 
 .sidebar a {
-  padding: 11px 12px;
+  min-height: 38px;
+  padding: 8px 12px;
   border: 1px solid transparent;
   border-radius: 8px;
   color: #405061;
@@ -113,14 +117,10 @@ dt,
   color: #172635;
 }
 
-.content-shell {
-  min-width: 0;
-}
-
 .page-shell {
   width: min(1440px, 100%);
   margin: 0 auto;
-  padding: 32px;
+  padding: 28px 32px 40px;
 }
 
 .page-stack {
@@ -491,6 +491,69 @@ button:hover,
   object-fit: cover;
 }
 
+.issue-overview-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.75fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.issue-summary-panel {
+  position: sticky;
+  top: 94px;
+}
+
+.snapshot-stage,
+.snapshot-preview {
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 14px;
+  border: 1px solid #d8e2eb;
+  border-radius: 8px;
+  background: #0f1720;
+}
+
+.snapshot-stage img,
+.snapshot-preview img {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.snapshot-placeholder {
+  display: grid;
+  min-height: 180px;
+  margin-bottom: 14px;
+  place-items: center;
+  border: 1px dashed #bdccd9;
+  border-radius: 8px;
+  color: #6c7d8d;
+  background: #f5f8fb;
+}
+
+.timeline-thumb {
+  width: 76px;
+  height: 54px;
+  border: 1px solid #d8e2eb;
+  border-radius: 6px;
+  object-fit: cover;
+  background: #f8fbfd;
+}
+
+.image-caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: #647586;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.image-caption strong {
+  flex: 0 0 auto;
+  color: #273746;
+}
+
 .empty-panel {
   display: grid;
   min-height: 150px;
@@ -543,7 +606,7 @@ dd {
 
 table {
   width: 100%;
-  min-width: 940px;
+  min-width: 760px;
   border-collapse: collapse;
 }
 
@@ -645,12 +708,14 @@ td {
   min-width: 44px;
   min-height: 28px;
   border: 2px solid;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72);
+  pointer-events: none;
 }
 
 .detection-box span {
   position: absolute;
   left: -2px;
-  top: -30px;
+  top: -28px;
   padding: 4px 6px;
   border-radius: 6px 6px 0 0;
   font-size: 12px;
@@ -754,6 +819,39 @@ td {
   line-height: 1.6;
 }
 
+.judgement-box {
+  margin: 14px 0;
+  padding: 14px;
+  border: 1px solid #d7e1ea;
+  border-radius: 8px;
+  background: #f6f9fc;
+  line-height: 1.55;
+}
+
+.judgement-box p,
+.history-message-list p {
+  margin: 8px 0 0;
+  white-space: pre-wrap;
+}
+
+.history-message-list {
+  display: grid;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
+.history-message-list details {
+  padding: 12px;
+  border: 1px solid #d8e2eb;
+  border-radius: 8px;
+  background: #f8fbfd;
+}
+
+.history-message-list summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
 .text-link {
   color: #8dbff4;
   font-weight: 800;
@@ -786,25 +884,26 @@ td {
 }
 
 @media (max-width: 1120px) {
-  .app-layout {
-    grid-template-columns: 1fr;
-  }
-
   .sidebar {
-    position: static;
-    height: auto;
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .sidebar nav {
-    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    justify-content: flex-start;
     overflow-x: auto;
   }
 
   .summary-grid,
   .dashboard-grid,
   .detail-grid,
-  .form-grid {
+  .form-grid,
+  .issue-overview-grid {
     grid-template-columns: 1fr;
+  }
+
+  .issue-summary-panel {
+    position: static;
   }
 
   .stepper {
@@ -815,6 +914,19 @@ td {
 @media (max-width: 720px) {
   .page-shell {
     padding: 18px;
+  }
+
+  .sidebar {
+    padding: 12px 18px;
+  }
+
+  .sidebar nav {
+    width: 100%;
+  }
+
+  .sidebar a {
+    flex: 1 1 120px;
+    text-align: center;
   }
 
   .page-title {

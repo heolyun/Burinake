@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   getIssueDetail,
   getIssueVlmResults,
+  getSnapshotImageContentUrl,
   updateIssueStatus,
   type IssueDetail,
   type IssueStatus,
@@ -38,6 +39,36 @@ function typeLabel(type?: string | null) {
     NONE: '미분류',
   };
   return type ? labels[type] ?? type : '-';
+}
+
+function boolLabel(value?: boolean | null) {
+  if (value == null) return '-';
+  return value ? '예' : '아니오';
+}
+
+function detectionTypeLabel(type?: string | null) {
+  const labels: Record<string, string> = {
+    FIRE: '화재',
+    SMOKE: '연기',
+  };
+  return type ? labels[type] ?? type : '-';
+}
+
+function getBoxStyle(box: IssueDetail['detectionBoxes'][number], image: IssueDetail['triggerImage']) {
+  const imageWidth = image?.widthPx ?? 1;
+  const imageHeight = image?.heightPx ?? 1;
+  const x = box.x ?? 0;
+  const y = box.y ?? 0;
+  const width = box.width ?? 0;
+  const height = box.height ?? 0;
+  const isNormalized = box.coordinateType === 'NORMALIZED' || (x <= 1 && y <= 1 && width <= 1 && height <= 1);
+
+  return {
+    left: `${isNormalized ? x * 100 : (x / imageWidth) * 100}%`,
+    top: `${isNormalized ? y * 100 : (y / imageHeight) * 100}%`,
+    width: `${isNormalized ? width * 100 : (width / imageWidth) * 100}%`,
+    height: `${isNormalized ? height * 100 : (height / imageHeight) * 100}%`,
+  };
 }
 
 export function IssueDetailPage() {
@@ -183,161 +214,79 @@ export function IssueDetailPage() {
 
       {error ? <div className="message-box error-text">{error}</div> : null}
 
-      <section className="panel">
-        <div className="panel-title">
-          <h2>처리 액션</h2>
-          <span>{isActionLoading ? '처리 중' : '대기'}</span>
-        </div>
-        <div className="row-actions">
-          <button className="secondary-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('REAL_FIRE')}>
-            실제 화재
-          </button>
-          <button className="ghost-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('FALSE_ALARM')}>
-            오탐 처리
-          </button>
-          <button className="ghost-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('CLOSED')}>
-            종료
-          </button>
-          <button className="primary-button" type="button" disabled={isActionLoading || !latestVlmResult} onClick={() => void createDraft()}>
-            신고 초안 생성
-          </button>
-        </div>
-      </section>
-
-      <section className="detail-grid">
-        <article className="panel">
+      <section className="issue-overview-grid">
+        <article className="panel image-panel">
           <div className="panel-title">
-            <h2>이슈 정보</h2>
-            <span>{formatDateTime(issue.updatedAt)}</span>
-          </div>
-          <dl className="kv-grid">
-            <div>
-              <dt>최초 감지</dt>
-              <dd>{formatDateTime(issue.detectedAt)}</dd>
-            </div>
-            <div>
-              <dt>최근 감지</dt>
-              <dd>{formatDateTime(issue.lastDetectedAt)}</dd>
-            </div>
-            <div>
-              <dt>YOLO 분석</dt>
-              <dd>{formatDateTime(issue.lastYoloAnalyzedAt)}</dd>
-            </div>
-            <div>
-              <dt>VLM 분석</dt>
-              <dd>{formatDateTime(issue.lastVlmAnalyzedAt)}</dd>
-            </div>
-            <div>
-              <dt>Snapshot 수</dt>
-              <dd>{issue.snapshotCount ?? timeline.length}장</dd>
-            </div>
-            <div>
-              <dt>최대 bbox 비율</dt>
-              <dd>{formatNumber(issue.maxBoxAreaRatio)}</dd>
-            </div>
-          </dl>
-          {issue.latestMessage ? (
-            <div className="message-box">
-              <strong>최근 판단 메시지</strong>
-              <p>{issue.latestMessage}</p>
-            </div>
-          ) : null}
-        </article>
-
-        <aside className="panel">
-          <div className="panel-title">
-            <h2>Trigger Snapshot</h2>
+            <h2>감지 이미지</h2>
             <span>{triggerImage ? `#${triggerImage.imageId}` : '-'}</span>
           </div>
-          <dl className="kv-grid single">
-            <div>
-              <dt>storageKey</dt>
-              <dd>{triggerImage?.storageKey ?? '-'}</dd>
-            </div>
-            <div>
-              <dt>snapshotTime</dt>
-              <dd>{formatDateTime(triggerImage?.snapshotTime)}</dd>
-            </div>
-            <div>
-              <dt>크기</dt>
-              <dd>
-                {triggerImage?.widthPx ?? '-'} x {triggerImage?.heightPx ?? '-'}
-              </dd>
-            </div>
-          </dl>
-        </aside>
-      </section>
-
-      <section className="detail-grid">
-        <article className="panel">
-          <div className="panel-title">
-            <h2>YOLO 결과</h2>
-            <span>{yoloResult ? formatDateTime(yoloResult.analyzedAt) : '-'}</span>
-          </div>
-          <dl className="kv-grid">
-            <div>
-              <dt>isFire</dt>
-              <dd>{yoloResult?.isFire == null ? '-' : yoloResult.isFire ? 'true' : 'false'}</dd>
-            </div>
-            <div>
-              <dt>isSmoke</dt>
-              <dd>{yoloResult?.isSmoke == null ? '-' : yoloResult.isSmoke ? 'true' : 'false'}</dd>
-            </div>
-            <div>
-              <dt>fireConfidence</dt>
-              <dd>{formatNumber(yoloResult?.fireConfidence)}</dd>
-            </div>
-            <div>
-              <dt>smokeConfidence</dt>
-              <dd>{formatNumber(yoloResult?.smokeConfidence)}</dd>
-            </div>
-          </dl>
-          {detectionBoxes.length > 0 ? (
-            <div className="compact-list">
+          {triggerImage ? (
+            <div className="snapshot-stage">
+              <img src={getSnapshotImageContentUrl(triggerImage.imageId)} alt={`Snapshot ${triggerImage.imageId}`} />
               {detectionBoxes.map((box) => (
-                <div key={box.boxId}>
-                  <strong>{box.detectionType}</strong>
-                  <span>{formatNumber(box.confidence)}</span>
+                <div
+                  className={`detection-box detection-${box.detectionType.toLowerCase()}`}
+                  key={box.boxId}
+                  style={getBoxStyle(box, triggerImage)}
+                >
                   <span>
-                    {box.x ?? '-'}, {box.y ?? '-'} / {box.width ?? '-'}x{box.height ?? '-'}
+                    {detectionTypeLabel(box.detectionType)} {box.confidence == null ? '' : `${Math.round(box.confidence * 100)}%`}
                   </span>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="muted">저장된 bbox가 없습니다.</p>
+            <div className="snapshot-placeholder">이미지 없음</div>
           )}
+          <div className="image-caption">
+            <span>{triggerImage?.storageKey ?? '-'}</span>
+            <strong>{triggerImage?.widthPx ?? '-'} x {triggerImage?.heightPx ?? '-'}</strong>
+          </div>
         </article>
 
-        <aside className="panel">
+        <aside className="panel issue-summary-panel">
           <div className="panel-title">
-            <h2>VLM 결과</h2>
-            <span>{latestVlmResult ? `round ${latestVlmResult.analysisRound}` : '-'}</span>
+            <h2>핵심 판단</h2>
+            <span>{isActionLoading ? '처리 중' : '대기'}</span>
           </div>
-          <dl className="kv-grid single">
+          <dl className="kv-grid compact">
             <div>
-              <dt>실제 화재</dt>
-              <dd>{latestVlmResult?.isRealFire == null ? '-' : latestVlmResult.isRealFire ? 'true' : 'false'}</dd>
+              <dt>최초/최근 감지</dt>
+              <dd>{formatDateTime(issue.detectedAt)}</dd>
             </div>
             <div>
-              <dt>Level</dt>
-              <dd>{latestVlmResult?.level ?? '-'}</dd>
+              <dt>YOLO</dt>
+              <dd>
+                화재 {boolLabel(yoloResult?.isFire)} / 연기 {boolLabel(yoloResult?.isSmoke)}
+              </dd>
             </div>
             <div>
-              <dt>confidence</dt>
-              <dd>{formatNumber(latestVlmResult?.confidence)}</dd>
+              <dt>bbox</dt>
+              <dd>{detectionBoxes.length}개</dd>
             </div>
             <div>
-              <dt>분석 시각</dt>
-              <dd>{formatDateTime(latestVlmResult?.analyzedAt)}</dd>
+              <dt>VLM 실제 화재</dt>
+              <dd>{boolLabel(latestVlmResult?.isRealFire)}</dd>
             </div>
           </dl>
-          {latestVlmResult?.message || latestVlmResult?.situationSummary ? (
-            <div className="message-box">
-              <strong>판단 내용</strong>
-              <p>{latestVlmResult.message || latestVlmResult.situationSummary}</p>
-            </div>
-          ) : null}
+          <div className="judgement-box">
+            <strong>판단 내용 원문</strong>
+            <p>{latestVlmResult?.message || issue.latestMessage || '저장된 판단 내용이 없습니다.'}</p>
+          </div>
+          <div className="row-actions">
+            <button className="secondary-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('REAL_FIRE')}>
+              실제 화재
+            </button>
+            <button className="ghost-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('FALSE_ALARM')}>
+              오탐 처리
+            </button>
+            <button className="ghost-button" type="button" disabled={isActionLoading} onClick={() => void changeIssueStatus('CLOSED')}>
+              종료
+            </button>
+            <button className="primary-button" type="button" disabled={isActionLoading || !latestVlmResult} onClick={() => void createDraft()}>
+              신고 초안 생성
+            </button>
+          </div>
         </aside>
       </section>
 
@@ -440,7 +389,6 @@ export function IssueDetailPage() {
                 <th>Level</th>
                 <th>confidence</th>
                 <th>분석 시각</th>
-                <th>메시지</th>
               </tr>
             </thead>
             <tbody>
@@ -451,18 +399,27 @@ export function IssueDetailPage() {
                   <td>{vlm.level ?? '-'}</td>
                   <td>{formatNumber(vlm.confidence)}</td>
                   <td>{formatDateTime(vlm.analyzedAt)}</td>
-                  <td className="wide-cell">{vlm.message ?? vlm.situationSummary ?? '-'}</td>
                 </tr>
               ))}
               {vlmHistory.length === 0 ? (
                 <tr>
-                  <td colSpan={6}>
+                  <td colSpan={5}>
                     <span className="muted">VLM 이력이 없습니다.</span>
                   </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
+          {vlmHistory.length > 0 ? (
+            <div className="history-message-list">
+              {vlmHistory.map((vlm) => (
+                <details key={`message-${vlm.vlmResultId}`} open={vlm.analysisRound === latestVlmResult?.analysisRound}>
+                  <summary>round {vlm.analysisRound} 판단 내용 원문</summary>
+                  <p>{vlm.message ?? vlm.situationSummary ?? '-'}</p>
+                </details>
+              ))}
+            </div>
+          ) : null}
         </article>
 
         <aside className="panel table-panel">
@@ -474,6 +431,7 @@ export function IssueDetailPage() {
             <thead>
               <tr>
                 <th>imageId</th>
+                <th>image</th>
                 <th>snapshotTime</th>
                 <th>storageKey</th>
               </tr>
@@ -482,6 +440,13 @@ export function IssueDetailPage() {
               {timeline.map((snapshot) => (
                 <tr key={snapshot.imageId}>
                   <td>#{snapshot.imageId}</td>
+                  <td>
+                    <img
+                      className="timeline-thumb"
+                      src={getSnapshotImageContentUrl(snapshot.imageId)}
+                      alt={`Snapshot ${snapshot.imageId}`}
+                    />
+                  </td>
                   <td>{formatDateTime(snapshot.snapshotTime)}</td>
                   <td className="wide-cell">{snapshot.storageKey ?? '-'}</td>
                 </tr>

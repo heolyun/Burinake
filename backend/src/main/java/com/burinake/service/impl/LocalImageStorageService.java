@@ -40,6 +40,15 @@ public class LocalImageStorageService implements ImageStorageService {
         return store(file, StoragePathBuilder.reportPath(file, reportId, createdDate));
     }
 
+    @Override
+    public byte[] read(String storageKey) throws IOException {
+        Path localPath = rootPath.resolve(storageKey).normalize();
+        if (!localPath.startsWith(rootPath.normalize())) {
+            throw new IOException("Invalid storage key: " + storageKey);
+        }
+        return Files.readAllBytes(localPath);
+    }
+
     private StoredImage store(MultipartFile file, String blobPath) throws IOException {
         Path localPath = rootPath.resolve(blobPath);
         try {

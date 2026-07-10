@@ -5,11 +5,9 @@ export function AppLayout() {
   return (
     <div className="app-layout">
       <Sidebar />
-      <div className="content-shell">
-        <main className="page-shell">
-          <Outlet />
-        </main>
-      </div>
+      <main className="page-shell">
+        <Outlet />
+      </main>
     </div>
   );
 }

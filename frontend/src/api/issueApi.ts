@@ -119,3 +119,9 @@ export async function updateIssueStatus(issueId: number, payload: IssueStatusUpd
   const response = await httpClient.patch<IssueDetail>(`/api/v1/issues/${issueId}/status`, payload);
   return response.data;
 }
+
+export function getSnapshotImageContentUrl(imageId: number) {
+  const path = `/api/v1/snapshot-images/${imageId}/content`;
+  const baseUrl = import.meta.env.VITE_API_BASE_URL;
+  return baseUrl ? new URL(path, baseUrl).toString() : path;
+}

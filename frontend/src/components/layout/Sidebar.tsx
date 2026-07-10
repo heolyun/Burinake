@@ -10,7 +10,7 @@ const navItems = [
 
 export function Sidebar() {
   return (
-    <aside className="sidebar">
+    <header className="sidebar">
       <div className="brand">
         <span>B</span>
         <div>
@@ -25,6 +25,6 @@ export function Sidebar() {
           </NavLink>
         ))}
       </nav>
-    </aside>
+    </header>
   );
 }

@@ -55,6 +55,11 @@ public class AzureBlobImageStorageService implements ImageStorageService {
         return upload(file, StoragePathBuilder.reportPath(file, reportId, createdDate));
     }
 
+    @Override
+    public byte[] read(String storageKey) {
+        return containerClient.getBlobClient(storageKey).downloadContent().toBytes();
+    }
+
     private StoredImage upload(MultipartFile file, String blobPath) throws IOException {
         try {
             BlobClient blobClient = containerClient.getBlobClient(blobPath);
