@@ -78,6 +78,7 @@ export type FireDetectionResponse = {
   yoloResult: YoloResult;
   vlmResult: VlmResult;
   processedAt: string;
+  errorMessage?: string | null;
 };
 
 export type FireDetectionRequest = {

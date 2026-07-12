@@ -17,6 +17,9 @@ public interface IssueMapper {
     @Select("SELECT nextval('issue_issue_id_seq')")
     Long nextId();
 
+    @Select("SELECT issue_id FROM issue WHERE issue_id = #{issueId} FOR UPDATE")
+    Long lockByIdForUpdate(@Param("issueId") Long issueId);
+
     @Select("""
             SELECT
                 issue_id, cctv_id, trigger_image_id, yolo_result_id, issue_type, issue_status,
@@ -51,7 +54,7 @@ public interface IssueMapper {
                 max_box_area_ratio, last_box_area_ratio, snapshot_count, created_at, updated_at
             FROM issue
             WHERE cctv_id = #{cctvId}
-              AND issue_status IN ('CANDIDATE', 'VLM_ANALYZING', 'REAL_FIRE', 'FALSE_ALARM')
+              AND issue_status IN ('CANDIDATE', 'VLM_ANALYZING', 'REAL_FIRE', 'FALSE_ALARM', 'REPORTED')
               AND COALESCE(last_detected_at, detected_at) >= #{snapshotTime} - INTERVAL '5 minutes'
             ORDER BY COALESCE(last_detected_at, detected_at) DESC
             LIMIT 1
@@ -128,6 +131,19 @@ public interface IssueMapper {
             @Param("lastDetectedAt") OffsetDateTime lastDetectedAt,
             @Param("lastYoloAnalyzedAt") OffsetDateTime lastYoloAnalyzedAt,
             @Param("boxAreaRatio") BigDecimal boxAreaRatio,
+            @Param("updatedAt") OffsetDateTime updatedAt
+    );
+
+    @Update("""
+            UPDATE issue
+            SET issue_status = 'VLM_ANALYZING',
+                last_vlm_analyzed_at = #{snapshotTime},
+                updated_at = #{updatedAt}
+            WHERE issue_id = #{issueId}
+            """)
+    int markVlmAnalysisStarted(
+            @Param("issueId") Long issueId,
+            @Param("snapshotTime") OffsetDateTime snapshotTime,
             @Param("updatedAt") OffsetDateTime updatedAt
     );
 

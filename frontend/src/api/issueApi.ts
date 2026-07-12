@@ -38,6 +38,8 @@ export type SnapshotImage = {
   heightPx: number | null;
   snapshotTime: string;
   createdAt: string;
+  yoloResult?: YoloResultDetail | null;
+  detectionBoxes?: DetectionBoxDetail[];
 };
 
 export type YoloResultDetail = {

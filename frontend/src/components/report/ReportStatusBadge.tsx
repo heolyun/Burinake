@@ -7,7 +7,7 @@ type Props = {
 const labels: Record<ReportStatus, string> = {
   DRAFT: '초안',
   APPROVED: '승인',
-  SENT: '전송',
+  SENT: '접수 완료',
   FAILED: '실패',
   CANCELED: '취소',
 };

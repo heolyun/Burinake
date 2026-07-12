@@ -41,12 +41,31 @@ public class AzureOpenAiSequenceVlmClient {
             You will receive:
             - yolo_detection_result
             - cctv_metadata
-            - a time-ordered image sequence
+            - a time-ordered image sequence captured immediately before and/or at the moment a 1st-stage YOLO detector signaled possible fire or smoke.
 
-            Task:
-            1. Decide whether the scene is a real fire or a false alarm.
-            2. Analyze the temporal sequence, not just the last frame.
-            3. Return only valid JSON that follows this exact schema:
+            Your crucial missions:
+            1. Strict false alarm filtering:
+               - Standard kitchen activities such as steam or smoke from cooking, red glowing neon signs, car taillights, strong sunsets, reflected lights, dust, fog, or camera artifacts can trigger false alarms.
+               - Use the temporal image sequence and YOLO bounding boxes together to determine whether the scene is a genuine hazardous fire or a harmless false alarm.
+            2. Comprehensive fire inference:
+               - If this is a true fire, assess the current risk level, identify the exact fire or smoke source zone, and infer the most likely visible ignition cause.
+               - Give special attention to growth, spread, persistence, smoke thickening, and whether fire/smoke appears attached to a physical source.
+            3. Automated 119 emergency report text:
+               - If this is a true fire, compose a professional Korean narrative emergency report draft using 5W1H.
+               - Heavily incorporate CCTV location and captured time metadata so first responders can identify the site immediately.
+               - If this is a false alarm, keep emergency_report_korean_narrative as an empty string.
+
+            Language requirements:
+            - All human-readable string values must be Korean.
+            - Keep fixed enum-like values such as risk_assessment.level in English: HIGH, MEDIUM, LOW, or UNKNOWN.
+            - Field names must remain exactly as specified in the schema.
+
+            Output constraints:
+            - Return only a valid JSON object.
+            - No conversational headers.
+            - No markdown blocks.
+            - No triple backticks.
+            - Follow this exact snake_case schema:
                {
                  "fire_confirmed": true,
                  "confidence": 0.86,
@@ -59,8 +78,6 @@ public class AzureOpenAiSequenceVlmClient {
                  "notes": "",
                  "emergency_report_korean_narrative": ""
                }
-            4. If it is a false alarm, keep emergency_report_korean_narrative empty.
-            5. Keep the response concise and factual.
             """;
 
     private final HttpClient httpClient;
@@ -90,8 +107,8 @@ public class AzureOpenAiSequenceVlmClient {
         try {
             return analyzeInternal(yoloDetectionResult, cctvMetadata, imageSequencePaths);
         } catch (Exception ex) {
-            log.warn("azure-openai-sequence-vlm-fallback reason=analysis-failed", ex);
-            return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
+            log.warn("azure-openai-sequence-vlm-failed reason=analysis-failed", ex);
+            throw new IllegalStateException("VLM 분석 실패: " + rootCauseMessage(ex), ex);
         }
     }
 
@@ -109,11 +126,11 @@ public class AzureOpenAiSequenceVlmClient {
             List<String> imageSequencePaths
     ) throws IOException, InterruptedException {
         if (imageSequencePaths == null || imageSequencePaths.isEmpty()) {
-            return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
+            throw new IllegalArgumentException("VLM image sequence is required");
         }
 
         if (!StringUtils.hasText(openAiProperties.endpoint()) || !StringUtils.hasText(openAiProperties.apiKey())) {
-            return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
+            throw new IllegalStateException("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_API_KEY are required");
         }
 
         ObjectNode root = objectMapper.createObjectNode();
@@ -159,26 +176,33 @@ public class AzureOpenAiSequenceVlmClient {
         JsonNode responseRoot = objectMapper.readTree(response.body());
         String rawContent = responseRoot.path("choices").path(0).path("message").path("content").asText("");
         if (!StringUtils.hasText(rawContent)) {
-            log.warn("azure-openai-sequence-vlm-fallback reason=empty-response");
-            return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
+            throw new IllegalStateException("Azure OpenAI returned empty VLM response");
         }
 
         String cleanJson = stripCodeFence(rawContent);
         try {
             return objectMapper.readValue(cleanJson, VlmAnalysisResponse.class);
         } catch (Exception ex) {
-            log.warn("azure-openai-sequence-vlm-fallback reason=parse-failed rawContent={}", rawContent, ex);
-            return VlmAnalysisResponse.fallback(yoloDetectionResult, cctvMetadata);
+            throw new IllegalStateException("Failed to parse VLM JSON response: " + rawContent, ex);
         }
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return StringUtils.hasText(current.getMessage()) ? current.getMessage() : current.getClass().getSimpleName();
     }
 
     private String buildPromptText(YoloResult yoloDetectionResult, VlmCctvMetadata cctvMetadata) {
         StringBuilder builder = new StringBuilder();
-        builder.append("Analyze the following fire detection context using the image sequence.\n\n");
-        builder.append("yolo_detection_result: ").append(safeJson(yoloDetectionResult)).append('\n');
-        builder.append("cctv_metadata: ").append(safeJson(cctvMetadata)).append('\n');
+        builder.append("Please conduct a comprehensive multi-frame analysis on the provided sequential images.\n\n");
+        builder.append("[Contextual Data Provided]\n");
+        builder.append("- 1st-stage YOLO Detector Raw Output: ").append(safeJson(yoloDetectionResult)).append('\n');
+        builder.append("- System CCTV & Time Metadata: ").append(safeJson(cctvMetadata)).append('\n');
         builder.append('\n');
-        builder.append("Return only the JSON object in the required schema.");
+        builder.append("Review the specific regions indicated by YOLO coordinates, analyze the temporal progression, and output the structured data in the required schema.");
         return builder.toString();
     }
 
@@ -213,23 +237,23 @@ public class AzureOpenAiSequenceVlmClient {
             return Files.readAllBytes(localPath);
         }
 
-        Path tempRootLocalPath = Path.of(System.getProperty("java.io.tmpdir"), "burinake-fire-events").resolve(imageSequencePath);
-        if (Files.exists(tempRootLocalPath)) {
-            return Files.readAllBytes(tempRootLocalPath);
+        for (String localRoot : List.of("burinake-storage", "burinake-fire-events")) {
+            Path tempRootLocalPath = Path.of(System.getProperty("java.io.tmpdir"), localRoot).resolve(imageSequencePath);
+            if (Files.exists(tempRootLocalPath)) {
+                return Files.readAllBytes(tempRootLocalPath);
+            }
         }
 
         return loadFromBlobPath(imageSequencePath);
     }
 
-    private byte[] loadFromBlobPath(String blobPath) {
+    private byte[] loadFromBlobPath(String blobPath) throws IOException {
         if (!StringUtils.hasText(storageProperties.connectionString())
                 || !StringUtils.hasText(storageProperties.blobContainer())) {
-            Path localFallbackPath = Path.of(System.getProperty("java.io.tmpdir"), "burinake-fire-events").resolve(blobPath);
-            if (Files.exists(localFallbackPath)) {
-                try {
-                    return Files.readAllBytes(localFallbackPath);
-                } catch (IOException ex) {
-                    throw new IllegalStateException("Failed to load local fallback image: " + blobPath, ex);
+            for (String localRoot : List.of("burinake-storage", "burinake-fire-events")) {
+                Path localCandidatePath = Path.of(System.getProperty("java.io.tmpdir"), localRoot).resolve(blobPath);
+                if (Files.exists(localCandidatePath)) {
+                    return Files.readAllBytes(localCandidatePath);
                 }
             }
             throw new IllegalStateException("AZURE_STORAGE_CONNECTION_STRING and AZURE_BLOB_CONTAINER are required");

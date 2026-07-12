@@ -17,7 +17,7 @@ export function VlmResultPanel({ result }: Props) {
       <dl className="kv-grid">
         <div>
           <dt>실제 화재</dt>
-          <dd>{result.isRealFire ? 'true' : 'false'}</dd>
+          <dd>{result.isRealFire ? '해당' : '아님'}</dd>
         </div>
         <div>
           <dt>신뢰도</dt>

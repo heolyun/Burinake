@@ -46,6 +46,18 @@ public interface EmergencyReportMapper {
             """)
     List<EmergencyReportRow> findByIssueId(@Param("issueId") Long issueId);
 
+    @Select("""
+            SELECT report_id, issue_id, vlm_result_id, report_status, report_message,
+                   receiver, approved_by, approved_at, sent_at, response_code,
+                   response_body, created_at, updated_at
+            FROM emergency_report
+            WHERE issue_id = #{issueId}
+              AND report_status <> 'CANCELED'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """)
+    EmergencyReportRow findLatestNotCanceledByIssueId(@Param("issueId") Long issueId);
+
     @Insert("""
             INSERT INTO emergency_report (
                 report_id, issue_id, vlm_result_id, report_status, report_message,

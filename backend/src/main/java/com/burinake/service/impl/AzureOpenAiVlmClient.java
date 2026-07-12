@@ -3,10 +3,8 @@ package com.burinake.service.impl;
 import com.burinake.client.MultipartFormDataBuilder;
 import com.burinake.config.AiProperties;
 import com.burinake.config.AzureOpenAiProperties;
-import com.burinake.dto.RiskLevel;
 import com.burinake.dto.VlmResult;
 import com.burinake.dto.YoloResult;
-import com.burinake.dto.ai.VlmSummarizeResponse;
 import com.burinake.service.VlmClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -23,39 +21,18 @@ import java.time.OffsetDateTime;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
 class AzureOpenAiVlmClient implements VlmClient {
 
-    private static final Logger log = LoggerFactory.getLogger(AzureOpenAiVlmClient.class);
-
-    private static final String DEFAULT_SYSTEM_PROMPT = """
-            You are 'burinake VLM', a highly advanced AI core designed for a smart CCTV-based fire management and emergency dispatch system.
-            You will receive one or more sequential frames captured immediately before and after a 1st-stage detector (YOLO) signaled a possible fire or smoke event.
-
-            Output requirements:
-            - Return only valid JSON.
-            - Use this exact snake_case schema:
-              {
-                "fire_confirmed": true,
-                "confidence": 0.86,
-                "detected_bbox": {"x": 0, "y": 0, "width": 0, "height": 0, "label": "", "source": ""},
-                "timeline_summary": [{"frame_index": 0, "time_offset_s": 0, "observation": ""}],
-                "visual_cause": {"most_likely": "", "likely_ignition_mechanisms": [""], "confidence_explanation": ""},
-                "fire_location_detail": {"cctv_id": "", "site_metadata_location": "", "captured_at": "", "precise_zone": ""},
-                "risk_assessment": {"level": "", "rationale": "", "current_fire_size_estimate": "", "people_presence": ""},
-                "recommended_actions": [""],
-                "notes": "",
-                "emergency_report_korean_narrative": ""
-              }
-            - If this is a false alarm, set fire_confirmed to false, keep emergency_report_korean_narrative empty, and keep recommended_actions minimal.
-            - Keep the response concise, factual, and consistent with the provided YOLO and CCTV metadata.
+    private static final String SYSTEM_PROMPT = """
+            You are 'burinake VLM' for CCTV fire analysis.
+            Return only valid JSON matching the VlmResult schema.
+            All human-readable string values must be Korean.
+            If analysis cannot be completed, do not invent a result.
             """;
 
     private final HttpClient httpClient;
@@ -90,34 +67,8 @@ class AzureOpenAiVlmClient implements VlmClient {
             String contentType,
             String originalFilename
     ) {
-        return summarizeSequence(
-                imageId,
-                blobPath,
-                cctvName,
-                cctvNum,
-                source,
-                capturedAt,
-                yoloResult,
-                List.of(imageBytes),
-                contentType,
-                originalFilename
-        );
-    }
-
-    public VlmResult summarizeSequence(
-            Long imageId,
-            String blobPath,
-            String cctvName,
-            String cctvNum,
-            String source,
-            OffsetDateTime capturedAt,
-            YoloResult yoloResult,
-            List<byte[]> imageSequence,
-            String contentType,
-            String originalFilename
-    ) {
-        if (imageSequence == null || imageSequence.isEmpty()) {
-            return fallback(yoloResult);
+        if (imageBytes == null || imageBytes.length == 0) {
+            throw new IllegalArgumentException("VLM image bytes are required");
         }
 
         if (supportsAzureOpenAi()) {
@@ -130,49 +81,31 @@ class AzureOpenAiVlmClient implements VlmClient {
                         source,
                         capturedAt,
                         yoloResult,
-                        imageSequence,
-                        contentType,
-                        originalFilename
+                        imageBytes,
+                        contentType
                 );
             } catch (Exception ex) {
                 if (StringUtils.hasText(aiProperties.vlmBaseUrl())) {
                     try {
-                        return summarizeWithLocalVlmServer(
-                                imageId,
-                                blobPath,
-                                yoloResult,
-                                imageSequence,
-                                contentType,
-                                originalFilename
-                        );
-                    } catch (Exception localFallbackEx) {
-                        log.warn("azure-openai-vlm-fallback reason=local-vlm-failed-after-azure-failed", localFallbackEx);
-                        return fallback(yoloResult);
+                        return summarizeWithLocalVlmServer(imageId, blobPath, yoloResult, imageBytes, contentType, originalFilename);
+                    } catch (Exception localEx) {
+                        throw new IllegalStateException("Azure OpenAI and local VLM both failed. azureError="
+                                + rootCauseMessage(ex) + ", localError=" + rootCauseMessage(localEx), localEx);
                     }
                 }
-
-                log.warn("azure-openai-vlm-fallback reason=azure-failed", ex);
-                return fallback(yoloResult);
+                throw new IllegalStateException("Azure OpenAI VLM failed: " + rootCauseMessage(ex), ex);
             }
         }
 
         if (StringUtils.hasText(aiProperties.vlmBaseUrl())) {
             try {
-                return summarizeWithLocalVlmServer(
-                        imageId,
-                        blobPath,
-                        yoloResult,
-                        imageSequence,
-                        contentType,
-                        originalFilename
-                );
+                return summarizeWithLocalVlmServer(imageId, blobPath, yoloResult, imageBytes, contentType, originalFilename);
             } catch (Exception ex) {
-                log.warn("azure-openai-vlm-fallback reason=local-vlm-failed", ex);
-                return fallback(yoloResult);
+                throw new IllegalStateException("Local VLM failed: " + rootCauseMessage(ex), ex);
             }
         }
 
-        return fallback(yoloResult);
+        throw new IllegalStateException("No VLM provider is configured");
     }
 
     private VlmResult summarizeWithAzureOpenAi(
@@ -183,21 +116,15 @@ class AzureOpenAiVlmClient implements VlmClient {
             String source,
             OffsetDateTime capturedAt,
             YoloResult yoloResult,
-            List<byte[]> imageSequence,
-            String contentType,
-            String originalFilename
+            byte[] imageBytes,
+            String contentType
     ) throws IOException, InterruptedException {
-        String endpoint = normalizeEndpoint(azureOpenAiProperties.endpoint());
-        String deploymentName = defaultDeploymentName();
-        String apiVersion = defaultApiVersion();
-        int maxCompletionTokens = defaultMaxCompletionTokens();
-
         ObjectNode root = objectMapper.createObjectNode();
         ArrayNode messages = root.putArray("messages");
 
-        ObjectNode systemMessage = messages.addObject();
-        systemMessage.put("role", "system");
-        systemMessage.put("content", DEFAULT_SYSTEM_PROMPT);
+        messages.addObject()
+                .put("role", "system")
+                .put("content", SYSTEM_PROMPT);
 
         ObjectNode userMessage = messages.addObject();
         userMessage.put("role", "user");
@@ -205,24 +132,21 @@ class AzureOpenAiVlmClient implements VlmClient {
         content.addObject()
                 .put("type", "text")
                 .put("text", buildPromptText(imageId, blobPath, cctvName, cctvNum, source, capturedAt, yoloResult));
+        content.addObject()
+                .put("type", "image_url")
+                .putObject("image_url")
+                .put("url", "data:%s;base64,%s".formatted(
+                        normalizeContentType(contentType),
+                        Base64.getEncoder().encodeToString(imageBytes)
+                ));
 
-        for (int index = 0; index < imageSequence.size(); index++) {
-            byte[] frame = Objects.requireNonNull(imageSequence.get(index), "imageSequence");
-            String mimeType = normalizeContentType(contentType);
-            String dataUrl = "data:%s;base64,%s".formatted(mimeType, Base64.getEncoder().encodeToString(frame));
-            ObjectNode imageNode = content.addObject();
-            imageNode.put("type", "image_url");
-            ObjectNode imageUrlNode = imageNode.putObject("image_url");
-            imageUrlNode.put("url", dataUrl);
-        }
-
-        root.put("max_completion_tokens", maxCompletionTokens);
+        root.put("max_completion_tokens", defaultMaxCompletionTokens());
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create("%s/openai/deployments/%s/chat/completions?api-version=%s".formatted(
-                        endpoint,
-                        deploymentName,
-                        apiVersion
+                        normalizeEndpoint(azureOpenAiProperties.endpoint()),
+                        defaultDeploymentName(),
+                        defaultApiVersion()
                 )))
                 .timeout(Duration.ofSeconds(120))
                 .header("Content-Type", "application/json")
@@ -238,39 +162,32 @@ class AzureOpenAiVlmClient implements VlmClient {
         JsonNode responseRoot = objectMapper.readTree(response.body());
         String rawContent = responseRoot.path("choices").path(0).path("message").path("content").asText("");
         if (!StringUtils.hasText(rawContent)) {
-            log.warn("azure-openai-vlm-fallback reason=empty-response imageId={}", imageId);
-            return fallback(yoloResult);
+            throw new IllegalStateException("Azure OpenAI returned empty VLM response");
         }
-
-        return parseVlmResponse(rawContent, yoloResult);
+        return parseVlmResponse(rawContent);
     }
 
     private VlmResult summarizeWithLocalVlmServer(
             Long imageId,
             String blobPath,
             YoloResult yoloResult,
-            List<byte[]> imageSequence,
+            byte[] imageBytes,
             String contentType,
             String originalFilename
     ) throws IOException, InterruptedException {
-        if (imageSequence.isEmpty()) {
-            return fallback(yoloResult);
-        }
-
         String boundary = "----BurinakeBoundary" + ThreadLocalRandom.current().nextLong(Long.MAX_VALUE);
-        String yoloJson = objectMapper.writeValueAsString(yoloResult);
         MultipartFormDataBuilder.MultipartBody body = MultipartFormDataBuilder.build(
                 boundary,
                 Map.of(
                         "imageId", imageId.toString(),
                         "blobPath", blobPath,
-                        "yoloResult", yoloJson
+                        "yoloResult", objectMapper.writeValueAsString(yoloResult)
                 ),
                 new MultipartFormDataBuilder.FilePart(
                         "image",
-                        originalFilename,
+                        StringUtils.hasText(originalFilename) ? originalFilename : "image.jpg",
                         normalizeContentType(contentType),
-                        imageSequence.get(0)
+                        imageBytes
                 )
         );
 
@@ -285,11 +202,10 @@ class AzureOpenAiVlmClient implements VlmClient {
         if (response.statusCode() >= 400) {
             throw new IllegalStateException("VLM server returned " + response.statusCode() + ": " + response.body());
         }
-
         return objectMapper.readValue(response.body(), VlmResult.class);
     }
 
-    private VlmResult parseVlmResponse(String rawContent, YoloResult yoloResult) {
+    private VlmResult parseVlmResponse(String rawContent) {
         String cleanJsonText = rawContent
                 .trim()
                 .replaceAll("^```json\\s*", "")
@@ -300,7 +216,7 @@ class AzureOpenAiVlmClient implements VlmClient {
         try {
             return objectMapper.readValue(cleanJsonText, VlmResult.class);
         } catch (Exception ex) {
-            return fallback(yoloResult);
+            throw new IllegalStateException("Failed to parse VLM JSON response: " + rawContent, ex);
         }
     }
 
@@ -314,28 +230,14 @@ class AzureOpenAiVlmClient implements VlmClient {
             YoloResult yoloResult
     ) {
         StringBuilder builder = new StringBuilder();
-        builder.append("Please conduct a comprehensive multi-frame analysis on the provided sequential images.\n\n");
-        builder.append("[Contextual Data Provided]\n");
-        builder.append("- 1st-stage YOLO Detector Raw Output: ")
-                .append(safeJson(yoloResult))
-                .append('\n');
-        builder.append("- Fire event metadata:\n");
-        builder.append("  - imageId: ").append(imageId).append('\n');
-        builder.append("  - blobPath: ").append(blobPath).append('\n');
-        if (StringUtils.hasText(cctvName)) {
-            builder.append("  - cctvName: ").append(cctvName).append('\n');
-        }
-        if (StringUtils.hasText(cctvNum)) {
-            builder.append("  - cctvNum: ").append(cctvNum).append('\n');
-        }
-        if (StringUtils.hasText(source)) {
-            builder.append("  - source: ").append(source).append('\n');
-        }
-        if (capturedAt != null) {
-            builder.append("  - capturedAt: ").append(capturedAt).append('\n');
-        }
-        builder.append('\n');
-        builder.append("Review the specific regions indicated by YOLO coordinates, analyze the temporal progression, and output the structured data.");
+        builder.append("Analyze this CCTV fire detection image and return structured JSON.\n");
+        builder.append("imageId: ").append(imageId).append('\n');
+        builder.append("blobPath: ").append(blobPath).append('\n');
+        builder.append("cctvName: ").append(cctvName).append('\n');
+        builder.append("cctvNum: ").append(cctvNum).append('\n');
+        builder.append("source: ").append(source).append('\n');
+        builder.append("capturedAt: ").append(capturedAt).append('\n');
+        builder.append("yoloResult: ").append(safeJson(yoloResult)).append('\n');
         return builder.toString();
     }
 
@@ -385,25 +287,14 @@ class AzureOpenAiVlmClient implements VlmClient {
     }
 
     private String normalizeContentType(String contentType) {
-        if (StringUtils.hasText(contentType)) {
-            return contentType;
-        }
-        return "image/jpeg";
+        return StringUtils.hasText(contentType) ? contentType : "image/jpeg";
     }
 
-    private VlmResult fallback(YoloResult yoloResult) {
-        if (yoloResult.detected()) {
-            return new VlmResult(
-                    "화재 징후가 확인되었습니다. 연기나 불꽃으로 보이는 영역이 있습니다.",
-                    RiskLevel.HIGH,
-                    "즉시 대피하고 119에 신고하세요."
-            );
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
         }
-
-        return new VlmResult(
-                "화재 징후가 뚜렷하지 않습니다. 현재 입력 기준으로는 이상 징후가 보이지 않습니다.",
-                RiskLevel.LOW,
-                "추가 모니터링을 권장합니다."
-        );
+        return StringUtils.hasText(current.getMessage()) ? current.getMessage() : current.getClass().getSimpleName();
     }
 }

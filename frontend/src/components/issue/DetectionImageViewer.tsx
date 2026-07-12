@@ -30,6 +30,14 @@ function toBoxStyle(box: DetectionBox, image: SnapshotImage) {
   };
 }
 
+function detectionTypeLabel(type: string) {
+  const labels: Record<string, string> = {
+    FIRE: '화재',
+    SMOKE: '연기',
+  };
+  return labels[type] ?? type;
+}
+
 export function DetectionImageViewer({ image, boxes }: Props) {
   if (!image) {
     return <div className="empty-panel">이미지가 없습니다.</div>;
@@ -37,7 +45,7 @@ export function DetectionImageViewer({ image, boxes }: Props) {
 
   return (
     <div className="detection-viewer">
-      <img src={image.imageUrl} alt="Trigger snapshot" />
+      <img src={image.imageUrl} alt="감지 기준 이미지" />
       {boxes.map((box) => (
         <div
           className={`detection-box detection-${box.detectionType.toLowerCase()}`}
@@ -45,7 +53,7 @@ export function DetectionImageViewer({ image, boxes }: Props) {
           style={toBoxStyle(box, image)}
         >
           <span>
-            {box.detectionType} {(box.confidence * 100).toFixed(0)}%
+            {detectionTypeLabel(box.detectionType)} {(box.confidence * 100).toFixed(0)}%
           </span>
         </div>
       ))}

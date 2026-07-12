@@ -139,7 +139,7 @@ public class FireEventPersistenceService {
                 null,
                 null,
                 snapshotImage.snapshotTime(),
-                now,
+                snapshotImage.snapshotTime(),
                 null,
                 null,
                 boxAreaRatio,
@@ -151,11 +151,61 @@ public class FireEventPersistenceService {
         issueMapper.insert(issue);
         attachSnapshot(issueId, snapshotImage.imageId(), snapshotImage.snapshotTime(), true, now);
         persistVlmResult(issueId, 1, yoloResult, vlmResult, now);
-        updateIssueWithVlm(issueId, vlmResult, yoloResult, boxAreaRatio, now);
+        updateIssueWithVlm(issueId, vlmResult, yoloResult, boxAreaRatio, snapshotImage.snapshotTime(), now);
     }
 
     @Transactional
-    public void persistExistingAnalysis(IssueRow issue, SnapshotImageRow snapshotImage, YoloResult yoloResult, VlmResult vlmResult) {
+    public IssueRow createIssueFromDetection(SnapshotPersistResult context, YoloResult yoloResult) {
+        OffsetDateTime now = OffsetDateTime.now();
+        SnapshotImageRow snapshotImage = context.snapshotImage();
+        Long yoloResultId = persistYoloResult(snapshotImage.imageId(), yoloResult, now);
+
+        if (!yoloResult.detected()) {
+            return null;
+        }
+
+        String issueType = deriveIssueType(yoloResult);
+        BigDecimal boxAreaRatio = calculateBoxAreaRatio(yoloResult, snapshotImage);
+        Long issueId = issueMapper.nextId();
+        IssueRow issue = new IssueRow(
+                issueId,
+                context.cctv().cctvId(),
+                snapshotImage.imageId(),
+                yoloResultId,
+                issueType,
+                "VLM_ANALYZING",
+                snapshotImage.snapshotTime(),
+                snapshotImage.snapshotTime(),
+                snapshotImage.snapshotTime(),
+                null,
+                null,
+                null,
+                null,
+                snapshotImage.snapshotTime(),
+                snapshotImage.snapshotTime(),
+                null,
+                null,
+                boxAreaRatio,
+                boxAreaRatio,
+                1,
+                now,
+                now
+        );
+        issueMapper.insert(issue);
+        attachSnapshot(issueId, snapshotImage.imageId(), snapshotImage.snapshotTime(), true, now);
+        return issue;
+    }
+
+    @Transactional
+    public void persistVlmAnalysis(IssueRow issue, SnapshotImageRow snapshotImage, YoloResult yoloResult, VlmResult vlmResult) {
+        OffsetDateTime now = OffsetDateTime.now();
+        BigDecimal boxAreaRatio = calculateBoxAreaRatio(yoloResult, snapshotImage);
+        persistVlmResult(issue.issueId(), vlmResultMapper.nextAnalysisRound(issue.issueId()), yoloResult, vlmResult, now);
+        updateIssueWithVlm(issue.issueId(), vlmResult, yoloResult, boxAreaRatio, snapshotImage.snapshotTime(), now);
+    }
+
+    @Transactional
+    public void persistExistingYoloAnalysis(IssueRow issue, SnapshotImageRow snapshotImage, YoloResult yoloResult) {
         OffsetDateTime now = OffsetDateTime.now();
         persistYoloResult(snapshotImage.imageId(), yoloResult, now);
 
@@ -165,7 +215,7 @@ public class FireEventPersistenceService {
                     issue.issueType(),
                     issue.issueStatus(),
                     snapshotImage.snapshotTime(),
-                    now,
+                    snapshotImage.snapshotTime(),
                     BigDecimal.ZERO,
                     now
             );
@@ -179,17 +229,29 @@ public class FireEventPersistenceService {
                 issueType,
                 issue.issueStatus(),
                 snapshotImage.snapshotTime(),
-                now,
+                snapshotImage.snapshotTime(),
                 boxAreaRatio,
                 now
         );
+    }
+
+    @Transactional
+    public void markVlmAnalysisStarted(Long issueId, OffsetDateTime snapshotTime) {
+        issueMapper.markVlmAnalysisStarted(issueId, snapshotTime, OffsetDateTime.now());
+    }
+
+    @Transactional
+    public void persistExistingAnalysis(IssueRow issue, SnapshotImageRow snapshotImage, YoloResult yoloResult, VlmResult vlmResult) {
+        persistExistingYoloAnalysis(issue, snapshotImage, yoloResult);
 
         if (vlmResult == null) {
             return;
         }
 
+        OffsetDateTime now = OffsetDateTime.now();
+        BigDecimal boxAreaRatio = calculateBoxAreaRatio(yoloResult, snapshotImage);
         persistVlmResult(issue.issueId(), vlmResultMapper.nextAnalysisRound(issue.issueId()), yoloResult, vlmResult, now);
-        updateIssueWithVlm(issue.issueId(), vlmResult, yoloResult, boxAreaRatio, now);
+        updateIssueWithVlm(issue.issueId(), vlmResult, yoloResult, boxAreaRatio, snapshotImage.snapshotTime(), now);
     }
 
     @Transactional
@@ -215,19 +277,7 @@ public class FireEventPersistenceService {
         snapshotImageMapper.insert(snapshotImage);
 
         YoloResult yoloResult = command.yoloResult();
-        YoloResultRow yoloResultRow = new YoloResultRow(
-                yoloResultMapper.nextId(),
-                command.imageId(),
-                "YOLO",
-                null,
-                1,
-                yoloResult.detected(),
-                hasSmoke(yoloResult),
-                yoloResult.detected() ? asBigDecimal(yoloResult.confidence()) : null,
-                hasSmoke(yoloResult) ? asBigDecimal(yoloResult.confidence()) : null,
-                toJson(yoloResult),
-                now
-        );
+        YoloResultRow yoloResultRow = toYoloResultRow(command.imageId(), yoloResult, now);
         yoloResultMapper.insert(yoloResultRow);
 
         int boxOrder = 1;
@@ -323,19 +373,7 @@ public class FireEventPersistenceService {
     }
 
     private Long persistYoloResult(Long imageId, YoloResult yoloResult, OffsetDateTime now) {
-        YoloResultRow yoloResultRow = new YoloResultRow(
-                yoloResultMapper.nextId(),
-                imageId,
-                "YOLO",
-                null,
-                1,
-                yoloResult.detected(),
-                hasSmoke(yoloResult),
-                yoloResult.detected() ? asBigDecimal(yoloResult.confidence()) : null,
-                hasSmoke(yoloResult) ? asBigDecimal(yoloResult.confidence()) : null,
-                toJson(yoloResult),
-                now
-        );
+        YoloResultRow yoloResultRow = toYoloResultRow(imageId, yoloResult, now);
         yoloResultMapper.insert(yoloResultRow);
 
         int boxOrder = 1;
@@ -345,6 +383,25 @@ public class FireEventPersistenceService {
         }
 
         return yoloResultRow.yoloResultId();
+    }
+
+    private YoloResultRow toYoloResultRow(Long imageId, YoloResult yoloResult, OffsetDateTime now) {
+        boolean hasFire = hasFire(yoloResult);
+        boolean hasSmoke = hasSmoke(yoloResult);
+
+        return new YoloResultRow(
+                yoloResultMapper.nextId(),
+                imageId,
+                "YOLO",
+                null,
+                1,
+                hasFire,
+                hasSmoke,
+                hasFire ? confidenceForLabel(yoloResult, "fire") : null,
+                hasSmoke ? confidenceForLabel(yoloResult, "smoke") : null,
+                toJson(yoloResult),
+                now
+        );
     }
 
     private void persistVlmResult(Long issueId, Integer analysisRound, YoloResult yoloResult, VlmResult vlmResult, OffsetDateTime now) {
@@ -367,25 +424,33 @@ public class FireEventPersistenceService {
         vlmResultMapper.insert(vlmResultRow);
     }
 
-    private void updateIssueWithVlm(Long issueId, VlmResult vlmResult, YoloResult yoloResult, BigDecimal boxAreaRatio, OffsetDateTime now) {
+    private void updateIssueWithVlm(
+            Long issueId,
+            VlmResult vlmResult,
+            YoloResult yoloResult,
+            BigDecimal boxAreaRatio,
+            OffsetDateTime analyzedSnapshotTime,
+            OffsetDateTime now
+    ) {
+        boolean analysisError = vlmResult.isAnalysisError();
         issueMapper.updateLatest(new IssueRow(
                 issueId,
                 null,
                 null,
                 null,
                 null,
-                isRealFire(vlmResult) ? "REAL_FIRE" : "FALSE_ALARM",
+                analysisError ? "VLM_ANALYZING" : isRealFire(vlmResult) ? "REAL_FIRE" : "FALSE_ALARM",
                 null,
                 null,
                 null,
-                isRealFire(vlmResult),
-                mapLevel(vlmResult.riskLevel()),
+                analysisError ? null : isRealFire(vlmResult),
+                analysisError ? null : mapLevel(vlmResult.riskLevel()),
                 vlmResult.recommendedAction(),
                 now,
                 null,
-                now,
-                now,
-                now,
+                analyzedSnapshotTime,
+                analyzedSnapshotTime,
+                analysisError ? null : now,
                 boxAreaRatio,
                 boxAreaRatio,
                 null,
@@ -395,6 +460,7 @@ public class FireEventPersistenceService {
     }
 
     private void attachSnapshot(Long issueId, Long imageId, OffsetDateTime snapshotTime, boolean triggerImage, OffsetDateTime now) {
+        issueMapper.lockByIdForUpdate(issueId);
         Integer sequenceNo = issueSnapshotMapper.nextSequenceNo(issueId);
         issueSnapshotMapper.insert(new IssueSnapshotRow(
                 issueSnapshotMapper.nextId(),
@@ -493,18 +559,38 @@ public class FireEventPersistenceService {
         return 0;
     }
 
+    private boolean hasFire(YoloResult yoloResult) {
+        return hasLabel(yoloResult, "fire");
+    }
+
     private boolean hasSmoke(YoloResult yoloResult) {
+        return hasLabel(yoloResult, "smoke");
+    }
+
+    private boolean hasLabel(YoloResult yoloResult, String label) {
         return yoloResult.boxes().stream()
-                .anyMatch(box -> box.label() != null && box.label().toLowerCase().contains("smoke"));
+                .anyMatch(box -> box.label() != null && box.label().toLowerCase().contains(label));
+    }
+
+    private BigDecimal confidenceForLabel(YoloResult yoloResult, String label) {
+        return yoloResult.boxes().stream()
+                .filter(box -> box.label() != null && box.label().toLowerCase().contains(label))
+                .map(BoundingBox::score)
+                .filter(score -> score != null)
+                .max(Double::compareTo)
+                .map(this::asBigDecimal)
+                .orElse(null);
     }
 
     private String deriveIssueType(YoloResult yoloResult) {
-        boolean hasFire = yoloResult.boxes().stream()
-                .anyMatch(box -> box.label() != null && box.label().toLowerCase().contains("fire"));
+        boolean hasFire = hasFire(yoloResult);
         boolean hasSmoke = hasSmoke(yoloResult);
 
         if (hasFire && hasSmoke) {
             return "FIRE_SMOKE";
+        }
+        if (hasFire) {
+            return "FIRE";
         }
         if (hasSmoke) {
             return "SMOKE";

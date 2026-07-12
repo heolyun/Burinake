@@ -26,8 +26,6 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import javax.imageio.ImageIO;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -41,7 +39,7 @@ import org.slf4j.LoggerFactory;
 public class DefaultFireDetectionService implements FireDetectionService {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultFireDetectionService.class);
-    private static final Duration YOLO_ANALYSIS_INTERVAL = Duration.ofSeconds(1);
+    private static final Duration YOLO_ANALYSIS_INTERVAL = Duration.ofSeconds(10);
     private static final Duration OPEN_ISSUE_VLM_INTERVAL = Duration.ofSeconds(30);
     private static final BigDecimal BOX_AREA_ESCALATION_MULTIPLIER = BigDecimal.valueOf(2.0);
     private static final BigDecimal BOX_AREA_ABSOLUTE_TRIGGER = BigDecimal.valueOf(0.10);
@@ -52,7 +50,6 @@ public class DefaultFireDetectionService implements FireDetectionService {
     private final VlmClient vlmClient;
     private final AzureOpenAiSequenceVlmClient sequenceVlmClient;
     private final VlmSequencePathService vlmSequencePathService;
-    private final Map<Long, OffsetDateTime> lastYoloAnalyzedAtByCctv = new ConcurrentHashMap<>();
 
     public DefaultFireDetectionService(
             FireEventPersistenceService fireEventPersistenceService,
@@ -132,7 +129,7 @@ public class DefaultFireDetectionService implements FireDetectionService {
                         null,
                         RiskLevel.UNKNOWN,
                         new YoloResult(false, null, java.util.List.of()),
-                        new VlmResult("", RiskLevel.UNKNOWN, ""),
+                        VlmResult.notAnalyzed("YOLO analysis was skipped because this issue is in cooldown."),
                         OffsetDateTime.now()
                 );
             }
@@ -148,31 +145,34 @@ public class DefaultFireDetectionService implements FireDetectionService {
             );
             log.info("fire-detection-yolo-complete imageId={} detected={} confidence={} elapsedMs={}",
                     imageId, yoloResult.detected(), yoloResult.confidence(), elapsedMillis(yoloStartNanos));
-            lastYoloAnalyzedAtByCctv.put(snapshotContext.cctv().cctvId(), snapshotTime);
             VlmResult vlmResult = null;
 
             if (openIssue == null) {
                 if (yoloResult.detected()) {
+                    IssueRow createdIssue = fireEventPersistenceService.createIssueFromDetection(snapshotContext, yoloResult);
                     long vlmStartNanos = System.nanoTime();
-                    vlmResult = summarizeSequence(snapshotContext, yoloResult, snapshotTime, java.util.List.of(storedImage.blobPath()));
+                    vlmResult = summarizeSequenceOrError(snapshotContext, yoloResult, snapshotTime, java.util.List.of(storedImage.blobPath()));
                     log.info("fire-detection-vlm-complete imageId={} phase=first-issue elapsedMs={}", imageId, elapsedMillis(vlmStartNanos));
+                    fireEventPersistenceService.persistVlmAnalysis(createdIssue, snapshotContext.snapshotImage(), yoloResult, vlmResult);
                 } else {
-                    vlmResult = new VlmResult("", RiskLevel.LOW, "");
+                    vlmResult = VlmResult.notAnalyzed("YOLO did not detect fire or smoke, so VLM analysis was not executed.");
+                    fireEventPersistenceService.persistNewAnalysis(snapshotContext, yoloResult, vlmResult);
                 }
-                fireEventPersistenceService.persistNewAnalysis(snapshotContext, yoloResult, vlmResult);
             } else {
                 boolean shouldAnalyzeVlm = yoloResult.detected() && shouldAnalyzeVlm(openIssue, yoloResult, imageDimensions, snapshotTime);
+                fireEventPersistenceService.persistExistingYoloAnalysis(openIssue, snapshotContext.snapshotImage(), yoloResult);
                 if (shouldAnalyzeVlm) {
+                    fireEventPersistenceService.markVlmAnalysisStarted(openIssue.issueId(), snapshotTime);
                     long vlmStartNanos = System.nanoTime();
-                    vlmResult = summarizeSequence(
+                    vlmResult = summarizeSequenceOrError(
                             snapshotContext,
                             yoloResult,
                             snapshotTime,
-                            vlmSequencePathService.resolveRecentSequencePaths(openIssue.issueId(), 6)
+                            vlmSequencePathService.resolveRecentSequencePaths(openIssue.issueId(), snapshotTime, 6)
                     );
                     log.info("fire-detection-vlm-complete imageId={} phase=open-issue elapsedMs={}", imageId, elapsedMillis(vlmStartNanos));
+                    fireEventPersistenceService.persistVlmAnalysis(openIssue, snapshotContext.snapshotImage(), yoloResult, vlmResult);
                 }
-                fireEventPersistenceService.persistExistingAnalysis(openIssue, snapshotContext.snapshotImage(), yoloResult, vlmResult);
             }
 
             log.info("fire-detection-finish imageId={} status={} totalElapsedMs={}", imageId, ProcessingStatus.COMPLETED, elapsedMillis(totalStartNanos));
@@ -184,15 +184,15 @@ public class DefaultFireDetectionService implements FireDetectionService {
                     yoloResult.confidence(),
                     vlmResult != null ? vlmResult.riskLevel() : RiskLevel.UNKNOWN,
                     yoloResult,
-                    vlmResult != null ? vlmResult : new VlmResult("", RiskLevel.UNKNOWN, ""),
+                    vlmResult != null ? vlmResult : VlmResult.notAnalyzed("VLM re-analysis conditions were not met for this snapshot."),
                     OffsetDateTime.now()
             );
         } catch (IOException ex) {
             log.error("Failed to process fire detection imageId={}", imageId, ex);
-            return FireDetectionResponse.failed(imageId, buildBlobPath(imageId, capturedDate));
+            return FireDetectionResponse.failed(imageId, buildBlobPath(imageId, capturedDate), "Image processing failed: " + rootCauseMessage(ex));
         } catch (Exception ex) {
             log.error("Unexpected error while processing fire detection imageId={}", imageId, ex);
-            return FireDetectionResponse.failed(imageId, buildBlobPath(imageId, capturedDate));
+            return FireDetectionResponse.failed(imageId, buildBlobPath(imageId, capturedDate), rootCauseMessage(ex));
         }
     }
 
@@ -251,11 +251,26 @@ public class DefaultFireDetectionService implements FireDetectionService {
         return analysisResponse.toVlmResult();
     }
 
+    private VlmResult summarizeSequenceOrError(
+            SnapshotPersistResult snapshotContext,
+            YoloResult yoloResult,
+            OffsetDateTime snapshotTime,
+            java.util.List<String> imageSequencePaths
+    ) {
+        try {
+            return summarizeSequence(snapshotContext, yoloResult, snapshotTime, imageSequencePaths);
+        } catch (Exception ex) {
+            log.error("fire-detection-vlm-error imageId={} cctvId={}",
+                    snapshotContext.snapshotImage().imageId(), snapshotContext.cctv().cctvId(), ex);
+            return VlmResult.analysisError("VLM sequence analysis failed", rootCauseMessage(ex));
+        }
+    }
+
     private OffsetDateTime resolveLastYoloAnalyzedAt(IssueRow openIssue, Long cctvId) {
         if (openIssue != null && openIssue.lastYoloAnalyzedAt() != null) {
             return openIssue.lastYoloAnalyzedAt();
         }
-        return lastYoloAnalyzedAtByCctv.get(cctvId);
+        return null;
     }
 
     private boolean shouldAnalyzeYolo(OffsetDateTime lastYoloAnalyzedAt, OffsetDateTime snapshotTime) {
@@ -264,6 +279,9 @@ public class DefaultFireDetectionService implements FireDetectionService {
     }
 
     private boolean shouldAnalyzeVlm(IssueRow openIssue, YoloResult yoloResult, ImageDimensions imageDimensions, OffsetDateTime snapshotTime) {
+        if ("VLM_ANALYZING".equals(openIssue.issueStatus())) {
+            return false;
+        }
         BigDecimal currentAreaRatio = calculateBoxAreaRatio(yoloResult, imageDimensions);
         return isIssueTypeEscalated(openIssue.issueType(), deriveIssueType(yoloResult))
                 || isBoxAreaEscalated(openIssue.maxBoxAreaRatio(), currentAreaRatio)
@@ -273,6 +291,14 @@ public class DefaultFireDetectionService implements FireDetectionService {
 
     private long elapsedMillis(long startNanos) {
         return (System.nanoTime() - startNanos) / 1_000_000L;
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return StringUtils.hasText(current.getMessage()) ? current.getMessage() : current.getClass().getSimpleName();
     }
 
     private boolean isIssueTypeEscalated(String currentType, String nextType) {

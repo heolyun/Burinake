@@ -82,7 +82,7 @@ public class IssueQueryService {
                 : detectionBoxMapper.findByYoloResultId(issue.yoloResultId()).stream().map(this::toDetectionBox).toList();
         VlmResultRow latestVlmResult = vlmResultMapper.findLatestByIssueId(issue.issueId());
         List<SnapshotImageResponse> timeline = snapshotImageMapper.findByIssueId(issue.issueId()).stream()
-                .map(this::toSnapshot)
+                .map(this::toSnapshotWithAnalysis)
                 .toList();
 
         return new IssueDetailResponse(
@@ -172,6 +172,36 @@ public class IssueQueryService {
                 image.heightPx(),
                 image.snapshotTime(),
                 image.createdAt()
+        );
+    }
+
+    private SnapshotImageResponse toSnapshotWithAnalysis(SnapshotImageRow image) {
+        if (image == null) {
+            return null;
+        }
+
+        YoloResultRow yoloResult = yoloResultMapper.findLatestByImageId(image.imageId());
+        List<DetectionBoxResponse> detectionBoxes = yoloResult == null
+                ? List.of()
+                : detectionBoxMapper.findByYoloResultId(yoloResult.yoloResultId()).stream()
+                        .map(this::toDetectionBox)
+                        .toList();
+
+        return new SnapshotImageResponse(
+                image.imageId(),
+                image.cctvId(),
+                image.storageProvider(),
+                image.storageContainer(),
+                image.storageKey(),
+                image.imageUrl(),
+                image.contentType(),
+                image.fileSizeBytes(),
+                image.widthPx(),
+                image.heightPx(),
+                image.snapshotTime(),
+                image.createdAt(),
+                toYolo(yoloResult),
+                detectionBoxes
         );
     }
 

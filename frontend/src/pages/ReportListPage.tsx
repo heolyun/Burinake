@@ -39,7 +39,7 @@ export function ReportListPage() {
     setActionId(reportId);
     setError(null);
     try {
-      const approvedBy = reportStatus === 'APPROVED' || reportStatus === 'SENT' ? 'dashboard' : undefined;
+      const approvedBy = reportStatus === 'APPROVED' || reportStatus === 'SENT' ? 'report-history' : undefined;
       await updateReportStatus(reportId, { reportStatus, approvedBy });
       await loadReports();
     } catch (requestError) {
@@ -69,6 +69,7 @@ export function ReportListPage() {
       <section className="page-title split">
         <div>
           <h1>신고 관리</h1>
+          <p className="page-subtitle">신고 초안과 접수 이력을 확인합니다.</p>
         </div>
         <div className="title-actions">
           <button className="secondary-button" type="button" onClick={() => void loadReports()}>
@@ -82,7 +83,7 @@ export function ReportListPage() {
           <option value="ALL">전체 상태</option>
           <option value="DRAFT">초안</option>
           <option value="APPROVED">승인</option>
-          <option value="SENT">전송</option>
+          <option value="SENT">접수 완료</option>
           <option value="FAILED">실패</option>
           <option value="CANCELED">취소</option>
         </select>
@@ -92,94 +93,70 @@ export function ReportListPage() {
       {isLoading ? <div className="empty-panel">신고 목록을 불러오는 중입니다.</div> : null}
 
       {!isLoading && (
-        <section className="panel table-panel">
-          <table>
-            <thead>
-              <tr>
-                <th>reportId</th>
-                <th>issueId</th>
-                <th>상태</th>
-                <th>수신처</th>
-                <th>승인</th>
-                <th>전송</th>
-                <th>메시지</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {visibleReports.map((report) => (
-                <tr key={report.reportId}>
-                  <td>#{report.reportId}</td>
-                  <td>
+        <section className="report-history-list">
+          {visibleReports.map((report) => (
+            <article className="panel report-history-card" key={report.reportId}>
+              <div className="report-event-head">
+                <div>
+                  <strong>신고 #{report.reportId}</strong>
+                  <span>
                     <Link className="text-link" to={`/issues/${report.issueId}`}>
-                      Issue #{report.issueId}
+                      이슈 #{report.issueId}
                     </Link>
-                  </td>
-                  <td>
-                    <ReportStatusBadge status={report.reportStatus} />
-                  </td>
-                  <td>{report.receiver}</td>
-                  <td>
-                    <strong>{report.approvedBy ?? '-'}</strong>
-                    <span>{formatDateTime(report.approvedAt)}</span>
-                  </td>
-                  <td>{formatDateTime(report.sentAt)}</td>
-                  <td className="wide-cell">{report.reportMessage}</td>
-                  <td>
-                    <div className="row-actions">
-                      {report.reportStatus === 'DRAFT' ? (
-                        <button
-                          className="secondary-button"
-                          type="button"
-                          disabled={actionId === report.reportId}
-                          onClick={() => void changeStatus(report.reportId, 'APPROVED')}
-                        >
-                          승인
-                        </button>
-                      ) : null}
-                      {report.reportStatus === 'DRAFT' || report.reportStatus === 'APPROVED' ? (
-                        <button
-                          className="primary-button"
-                          type="button"
-                          disabled={actionId === report.reportId}
-                          onClick={() => void changeStatus(report.reportId, 'SENT')}
-                        >
-                          전송 처리
-                        </button>
-                      ) : null}
-                      {report.reportStatus !== 'SENT' && report.reportStatus !== 'CANCELED' ? (
-                        <button
-                          className="ghost-button"
-                          type="button"
-                          disabled={actionId === report.reportId}
-                          onClick={() => void changeStatus(report.reportId, 'CANCELED')}
-                        >
-                          취소
-                        </button>
-                      ) : null}
-                      {report.reportStatus === 'DRAFT' ? (
-                        <button
-                          className="danger-button"
-                          type="button"
-                          disabled={actionId === report.reportId}
-                          onClick={() => void removeDraft(report.reportId)}
-                        >
-                          삭제
-                        </button>
-                      ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {visibleReports.length === 0 ? (
-                <tr>
-                  <td colSpan={8}>
-                    <span className="muted">표시할 신고가 없습니다.</span>
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+                  </span>
+                </div>
+                <ReportStatusBadge status={report.reportStatus} />
+              </div>
+              <dl className="report-meta-grid">
+                <div>
+                  <dt>수신처</dt>
+                  <dd>{report.receiver}</dd>
+                </div>
+                <div>
+                  <dt>승인</dt>
+                  <dd>
+                    {report.approvedBy ?? '-'} / {formatDateTime(report.approvedAt)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>접수 시각</dt>
+                  <dd>{formatDateTime(report.sentAt)}</dd>
+                </div>
+                <div>
+                  <dt>결과</dt>
+                  <dd>{report.responseCode ?? '-'}</dd>
+                </div>
+              </dl>
+              <details className="report-message">
+                <summary>메시지 내용</summary>
+                <p>{report.reportMessage}</p>
+                {report.responseBody ? <p className="muted">신고 파일: {report.responseBody}</p> : null}
+              </details>
+              <div className="row-actions">
+                {report.reportStatus === 'DRAFT' ? (
+                  <button className="secondary-button" type="button" disabled={actionId === report.reportId} onClick={() => void changeStatus(report.reportId, 'APPROVED')}>
+                    승인 처리
+                  </button>
+                ) : null}
+                {report.reportStatus === 'DRAFT' || report.reportStatus === 'APPROVED' ? (
+                  <button className="primary-button" type="button" disabled={actionId === report.reportId} onClick={() => void changeStatus(report.reportId, 'SENT')}>
+                    신고 접수
+                  </button>
+                ) : null}
+                {report.reportStatus !== 'SENT' && report.reportStatus !== 'CANCELED' ? (
+                  <button className="ghost-button" type="button" disabled={actionId === report.reportId} onClick={() => void changeStatus(report.reportId, 'CANCELED')}>
+                    취소
+                  </button>
+                ) : null}
+                {report.reportStatus === 'DRAFT' ? (
+                  <button className="danger-button" type="button" disabled={actionId === report.reportId} onClick={() => void removeDraft(report.reportId)}>
+                    삭제
+                  </button>
+                ) : null}
+              </div>
+            </article>
+          ))}
+          {visibleReports.length === 0 ? <div className="empty-panel">표시할 신고 기록이 없습니다.</div> : null}
         </section>
       )}
     </div>

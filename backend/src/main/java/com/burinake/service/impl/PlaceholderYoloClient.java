@@ -49,8 +49,7 @@ class HttpYoloClient implements YoloClient {
             String originalFilename
     ) {
         if (!StringUtils.hasText(baseUrl)) {
-            log.warn("yolo-request-skipped imageId={} reason=missing-base-url", imageId);
-            return new YoloResult(false, null, List.of());
+            throw new IllegalStateException("AI_YOLO_BASE_URL is required");
         }
 
         try {
@@ -90,13 +89,21 @@ class HttpYoloClient implements YoloClient {
             boolean detected = parsed.result() != null && parsed.result().detected();
             return new YoloResult(detected, maxScore(boxes), boxes);
         } catch (IOException ex) {
-            return new YoloResult(false, null, List.of());
+            throw new IllegalStateException("YOLO request failed: " + rootCauseMessage(ex), ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            return new YoloResult(false, null, List.of());
+            throw new IllegalStateException("YOLO request interrupted", ex);
         } catch (Exception ex) {
-            return new YoloResult(false, null, List.of());
+            throw new IllegalStateException("YOLO analysis failed: " + rootCauseMessage(ex), ex);
         }
+    }
+
+    private String rootCauseMessage(Throwable throwable) {
+        Throwable current = throwable;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return StringUtils.hasText(current.getMessage()) ? current.getMessage() : current.getClass().getSimpleName();
     }
 
     private String normalizeBaseUrl(String value) {

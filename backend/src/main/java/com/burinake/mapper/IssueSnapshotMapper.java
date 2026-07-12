@@ -38,11 +38,13 @@ public interface IssueSnapshotMapper {
             FROM issue_snapshot isnap
             JOIN snapshot_image si ON si.image_id = isnap.image_id
             WHERE isnap.issue_id = #{issueId}
-            ORDER BY isnap.sequence_no DESC
+              AND si.snapshot_time <= #{snapshotTime}
+            ORDER BY si.snapshot_time DESC, isnap.sequence_no DESC
             LIMIT #{limit}
             """)
     List<String> findRecentStorageKeys(
             @Param("issueId") Long issueId,
+            @Param("snapshotTime") java.time.OffsetDateTime snapshotTime,
             @Param("limit") int limit
     );
 }

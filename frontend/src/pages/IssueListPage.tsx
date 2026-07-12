@@ -63,6 +63,7 @@ export function IssueListPage() {
       <section className="page-title split">
         <div>
           <h1>이슈 관리</h1>
+          <p className="page-subtitle">감지 이슈의 상태, 위험도, AI 판단 이력을 확인합니다.</p>
         </div>
         <div className="title-actions">
           <button className="secondary-button" type="button" onClick={() => void loadIssues()}>
@@ -78,7 +79,7 @@ export function IssueListPage() {
           <option value="VLM_ANALYZING">VLM 분석 중</option>
           <option value="REAL_FIRE">실제 화재</option>
           <option value="FALSE_ALARM">오탐</option>
-          <option value="REPORTED">신고 완료</option>
+          <option value="REPORTED">신고 접수</option>
           <option value="CLOSED">종료</option>
         </select>
         <select value={typeFilter} onChange={onTypeFilter}>
@@ -102,14 +103,14 @@ export function IssueListPage() {
           <table>
             <thead>
               <tr>
-                <th>issueId</th>
+                <th>이슈</th>
                 <th>CCTV</th>
                 <th>유형</th>
                 <th>상태</th>
-                <th>Level</th>
-                <th>Snapshot</th>
+                <th>위험도</th>
+                <th>이미지</th>
                 <th>최근 감지</th>
-                <th>VLM</th>
+                <th>AI 판단</th>
                 <th />
               </tr>
             </thead>
@@ -133,7 +134,7 @@ export function IssueListPage() {
                   <td>{formatDateTime(issue.lastVlmAnalyzedAt)}</td>
                   <td>
                     <Link className="ghost-button" to={`/issues/${issue.issueId}`}>
-                      상세
+                      상세 기록
                     </Link>
                   </td>
                 </tr>

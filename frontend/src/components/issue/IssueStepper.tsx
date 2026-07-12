@@ -8,9 +8,9 @@ type Props = {
 
 export function IssueStepper({ issueStatus, hasVlmResult, reportStatus }: Props) {
   const steps = [
-    { label: 'Snapshot 저장', done: true },
+    { label: '이미지 저장', done: true },
     { label: 'YOLO 분석', done: true },
-    { label: 'Issue 생성', done: true },
+    { label: '이슈 생성', done: true },
     { label: 'VLM 분석', done: hasVlmResult || ['REAL_FIRE', 'FALSE_ALARM', 'REPORTED', 'CLOSED'].includes(issueStatus) },
     { label: '신고 초안', done: Boolean(reportStatus) },
     { label: '신고 완료', done: reportStatus === 'SENT' || issueStatus === 'REPORTED' },

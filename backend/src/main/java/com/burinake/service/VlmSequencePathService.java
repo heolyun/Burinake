@@ -4,6 +4,7 @@ import com.burinake.mapper.IssueSnapshotMapper;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.time.OffsetDateTime;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -15,12 +16,12 @@ public class VlmSequencePathService {
         this.issueSnapshotMapper = issueSnapshotMapper;
     }
 
-    public List<String> resolveRecentSequencePaths(Long issueId, int maxFrames) {
-        if (issueId == null || maxFrames <= 0) {
+    public List<String> resolveRecentSequencePaths(Long issueId, OffsetDateTime snapshotTime, int maxFrames) {
+        if (issueId == null || snapshotTime == null || maxFrames <= 0) {
             return List.of();
         }
 
-        List<String> recentDesc = issueSnapshotMapper.findRecentStorageKeys(issueId, maxFrames);
+        List<String> recentDesc = issueSnapshotMapper.findRecentStorageKeys(issueId, snapshotTime, maxFrames);
         if (recentDesc == null || recentDesc.isEmpty()) {
             return List.of();
         }

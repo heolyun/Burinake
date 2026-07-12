@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useState } from 'react';
 import { createCctv, deactivateCctv, getCctvs, updateCctv, type Cctv } from '../api/cctvApi';
+import { loadAutoModeSettings, saveAutoModeSettings, subscribeAutoModeSettings, type AutoModeSettings } from '../lib/autoMode';
 
 type FormState = {
   cctvName: string;
@@ -23,6 +24,7 @@ function formatDateTime(value?: string | null) {
 export function SettingsPage() {
   const [cctvs, setCctvs] = useState<Cctv[]>([]);
   const [formState, setFormState] = useState<FormState>(emptyForm);
+  const [autoMode, setAutoMode] = useState(loadAutoModeSettings);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -42,7 +44,14 @@ export function SettingsPage() {
 
   useEffect(() => {
     void loadCctvs();
+    return subscribeAutoModeSettings(setAutoMode);
   }, []);
+
+  const updateAutoMode = (patch: Partial<AutoModeSettings>) => {
+    const nextSettings = { ...autoMode, ...patch };
+    setAutoMode(nextSettings);
+    saveAutoModeSettings(nextSettings);
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -98,21 +107,47 @@ export function SettingsPage() {
       <section className="page-title">
         <div>
           <h1>설정</h1>
+          <p className="page-subtitle">운영 모드와 CCTV 기준 정보를 관리합니다.</p>
+        </div>
+      </section>
+
+      <section className="panel settings-control-panel">
+        <div className="panel-title">
+          <div>
+            <h2>자동 신고 모드</h2>
+            <span>위험 레벨 기준으로 자동 접수합니다.</span>
+          </div>
+          <label className="switch-row">
+            <input checked={autoMode.enabled} type="checkbox" onChange={(event) => updateAutoMode({ enabled: event.target.checked })} />
+            <span>{autoMode.enabled ? '켜짐' : '꺼짐'}</span>
+          </label>
+        </div>
+        <div className="settings-inline">
+          <label>
+            자동 접수 기준
+            <select value={autoMode.levelThreshold} onChange={(event) => updateAutoMode({ levelThreshold: Number(event.target.value) })}>
+              <option value={1}>Level 1 이상</option>
+              <option value={2}>Level 2 이상</option>
+              <option value={3}>Level 3 이상</option>
+              <option value={4}>Level 4 이상</option>
+            </select>
+          </label>
+          <p className="muted">조건을 만족하는 실제 화재 이슈는 신고 파일이 자동으로 생성됩니다.</p>
         </div>
       </section>
 
       <section className="panel">
         <div className="panel-title">
-          <h2>런타임 설정</h2>
-          <span>환경변수 기준</span>
+          <h2>연결 정보</h2>
+          <span>현재 프론트 연결 기준</span>
         </div>
         <dl className="result-card">
           <div>
-            <dt>Frontend API base URL</dt>
+            <dt>API 주소</dt>
             <dd>{import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8080'}</dd>
           </div>
           <div>
-            <dt>Fire detection endpoint</dt>
+            <dt>화재 감지 요청 경로</dt>
             <dd>/api/v1/fire-detections</dd>
           </div>
         </dl>
@@ -128,33 +163,18 @@ export function SettingsPage() {
           </div>
           <label>
             CCTV 이름
-            <input
-              value={formState.cctvName}
-              onChange={(event) => setFormState((prev) => ({ ...prev, cctvName: event.target.value }))}
-              required
-            />
+            <input value={formState.cctvName} onChange={(event) => setFormState((prev) => ({ ...prev, cctvName: event.target.value }))} required />
           </label>
           <label>
             CCTV 번호
-            <input
-              value={formState.cctvNum}
-              onChange={(event) => setFormState((prev) => ({ ...prev, cctvNum: event.target.value }))}
-              required
-            />
+            <input value={formState.cctvNum} onChange={(event) => setFormState((prev) => ({ ...prev, cctvNum: event.target.value }))} required />
           </label>
           <label>
             위치
-            <input
-              value={formState.location}
-              onChange={(event) => setFormState((prev) => ({ ...prev, location: event.target.value }))}
-            />
+            <input value={formState.location} onChange={(event) => setFormState((prev) => ({ ...prev, location: event.target.value }))} />
           </label>
           <label className="checkbox-row">
-            <input
-              checked={formState.isActive}
-              type="checkbox"
-              onChange={(event) => setFormState((prev) => ({ ...prev, isActive: event.target.checked }))}
-            />
+            <input checked={formState.isActive} type="checkbox" onChange={(event) => setFormState((prev) => ({ ...prev, isActive: event.target.checked }))} />
             활성화
           </label>
           <div className="form-footer">
@@ -206,9 +226,7 @@ export function SettingsPage() {
                     </td>
                     <td>{cctv.cctvNum}</td>
                     <td>
-                      <span className={`badge ${cctv.isActive ? 'status-active' : 'status-inactive'}`}>
-                        {cctv.isActive ? '활성' : '비활성'}
-                      </span>
+                      <span className={`badge ${cctv.isActive ? 'status-active' : 'status-inactive'}`}>{cctv.isActive ? '활성' : '비활성'}</span>
                     </td>
                     <td>{formatDateTime(cctv.updatedAt)}</td>
                     <td>

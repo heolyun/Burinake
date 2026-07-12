@@ -34,7 +34,7 @@ services:
       AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-Burinake-vlm}
       AZURE_OPENAI_API_VERSION: ${AZURE_OPENAI_API_VERSION:-2024-02-15-preview}
       AZURE_OPENAI_MAX_COMPLETION_TOKENS: ${AZURE_OPENAI_MAX_COMPLETION_TOKENS:-4000}
-      AI_YOLO_BASE_URL: ${AI_YOLO_BASE_URL:-http://yolo-server:8001}
+      AI_YOLO_BASE_URL: ${AI_YOLO_BASE_URL:-http://yolo-server:8000}
       AI_VLM_BASE_URL: http://vlm-server:8002
     depends_on:
       - postgres
@@ -43,19 +43,14 @@ services:
       - vlm-server
     volumes:
       - ./snapshot2:/app/test-images:ro
+      - backend_local_storage:/tmp/burinake-storage
 
   yolo-server:
-    build:
-      context: ./ai/yolo-server
-      dockerfile: Dockerfile
+    image: burinakeacr.azurecr.io/burinake-ai-server:v2
     ports:
-      - "${YOLO_SERVER_PORT:-8001}:8001"
+      - "${YOLO_SERVER_PORT:-8001}:8000"
     environment:
       APP_ENV: dev
-      MODEL_PATH: /app/models/yolo-fire.pt
-    volumes:
-      - ./ai/yolo-server:/app
-      - ${YOLO_MODEL_DIR:-/opt/burinake/models/yolo}:/app/models
 
   vlm-server:
     build:
@@ -102,3 +97,4 @@ volumes:
   frontend_node_modules:
   postgres_data:
   azurite_data:
+  backend_local_storage:

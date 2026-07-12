@@ -21,6 +21,16 @@ public interface YoloResultMapper {
             """)
     YoloResultRow findById(@Param("yoloResultId") Long yoloResultId);
 
+    @Select("""
+            SELECT yolo_result_id, image_id, model_name, model_version, analysis_round,
+                   is_fire, is_smoke, fire_confidence, smoke_confidence, raw_response, analyzed_at
+            FROM yolo_result
+            WHERE image_id = #{imageId}
+            ORDER BY analysis_round DESC, analyzed_at DESC
+            LIMIT 1
+            """)
+    YoloResultRow findLatestByImageId(@Param("imageId") Long imageId);
+
     @Insert("""
             INSERT INTO yolo_result (
                 yolo_result_id, image_id, model_name, model_version, analysis_round,
