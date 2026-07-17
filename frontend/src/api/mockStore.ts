@@ -48,6 +48,26 @@ export const mockStore = {
   getReports: (): EmergencyReport[] => clone(reports),
   getSettings: (): Settings => clone(settings),
 
+  createCctv(input: Omit<Cctv, 'cctvId'>): Cctv {
+    const cctv = { ...input, cctvId: Math.max(...cctvs.map((item) => item.cctvId), 0) + 1 };
+    cctvs = [cctv, ...cctvs];
+    return clone(cctv);
+  },
+
+  updateCctv(cctvId: number, patch: Partial<Cctv>): Cctv | null {
+    const current = cctvs.find((item) => item.cctvId === cctvId);
+    if (!current) return null;
+    cctvs = cctvs.map((item) => (item.cctvId === cctvId ? { ...item, ...patch } : item));
+    return clone(cctvs.find((item) => item.cctvId === cctvId)!);
+  },
+
+  deleteCctv(cctvId: number): Cctv | null {
+    const current = cctvs.find((item) => item.cctvId === cctvId);
+    if (!current) return null;
+    cctvs = cctvs.filter((item) => item.cctvId !== cctvId);
+    return clone(current);
+  },
+
   createSnapshot(input: UploadSnapshotInput): SnapshotImage {
     let cctv = cctvs.find((item) => item.cctvName === input.cctvName && item.cctvNum === input.cctvNum);
     if (!cctv) {
@@ -133,6 +153,19 @@ export const mockStore = {
     );
     updateIssueRecord(issueId, { issueStatus: 'REPORTED' });
     return clone(reports.find((item) => item.reportId === report.reportId)!);
+  },
+
+  updateReport(reportId: number, patch: Partial<EmergencyReport>): EmergencyReport | null {
+    const current = reports.find((item) => item.reportId === reportId);
+    if (!current) return null;
+    reports = reports.map((item) => (item.reportId === reportId ? { ...item, ...patch } : item));
+    return clone(reports.find((item) => item.reportId === reportId)!);
+  },
+
+  deleteReport(reportId: number): boolean {
+    const before = reports.length;
+    reports = reports.filter((item) => item.reportId !== reportId);
+    return reports.length < before;
   },
 
   saveSettings(nextSettings: Settings): Settings {

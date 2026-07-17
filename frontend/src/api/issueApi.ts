@@ -1,4 +1,5 @@
 import { httpClient } from '../lib/api/httpClient';
+import { demoApi, isDemoMode } from './demoApi';
 
 export type IssueStatus = 'CANDIDATE' | 'VLM_ANALYZING' | 'REAL_FIRE' | 'FALSE_ALARM' | 'REPORTED' | 'CLOSED';
 export type IssueType = 'FIRE' | 'SMOKE' | 'FIRE_SMOKE' | 'NONE';
@@ -103,26 +104,31 @@ export type IssueStatusUpdatePayload = {
 };
 
 export async function getIssues(limit = 100) {
+  if (isDemoMode) return demoApi.getIssues().slice(0, limit);
   const response = await httpClient.get<IssueSummary[]>('/api/v1/issues', { params: { limit } });
   return response.data;
 }
 
 export async function getIssueDetail(issueId: number) {
+  if (isDemoMode) return demoApi.getIssueDetail(issueId)!;
   const response = await httpClient.get<IssueDetail>(`/api/v1/issues/${issueId}`);
   return response.data;
 }
 
 export async function getIssueVlmResults(issueId: number) {
+  if (isDemoMode) return demoApi.getIssueVlmResults(issueId);
   const response = await httpClient.get<VlmResultDetail[]>(`/api/v1/issues/${issueId}/vlm-results`);
   return response.data;
 }
 
 export async function updateIssueStatus(issueId: number, payload: IssueStatusUpdatePayload) {
+  if (isDemoMode) return demoApi.updateIssueStatus(issueId, payload)!;
   const response = await httpClient.patch<IssueDetail>(`/api/v1/issues/${issueId}/status`, payload);
   return response.data;
 }
 
 export function getSnapshotImageContentUrl(imageId: number) {
+  if (isDemoMode) return demoApi.getSnapshotUrl(imageId);
   const path = `/api/v1/snapshot-images/${imageId}/content`;
   const baseUrl = import.meta.env.VITE_API_BASE_URL;
   return baseUrl ? new URL(path, baseUrl).toString() : path;
